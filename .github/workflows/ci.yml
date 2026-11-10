@@ -16,6 +16,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install pytest
+        run: pip install pytest
       - name: pytest suites
         run: python -m pytest tests/ -q
       - name: script suites (RED→GREEN selftests)
