@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+results/
+dist/
+*.egg-info/
+.governance/
+.pytest_cache/
+demo.db
