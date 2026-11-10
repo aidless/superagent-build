@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/superagent-build)](https://pypi.org/project/superagent-build/)
 [![Python](https://img.shields.io/pypi/pyversions/superagent-build)](https://pypi.org/project/superagent-build/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Tests](https://img.shields.io/badge/tests-19%20suites%2080%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-21%20files%20203%20checks%20passed-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-success)
 
 > 定位：把 dsh-superagent-prototype（22k★）宣传了但没做的四件事真的做出来。
@@ -36,7 +36,7 @@ Input → intake（幂等 receipt）
 ## 运行自检（RED→GREEN 纪律：先注入违规证明会红，再验证放行）
 
 ```bash
-python3 -m pytest tests/ -q             # 80 passed：老 9 套件 + i1_i4/i2/i3/i5/i6/integration + j1/j2/j3/j4
+python3 -m pytest tests/ -q             # 86 passed：i1_i4/i2/i3/i5/i6/integration + j1/j2/j3/j4 + k3 + 老套件
 python3 tests/test_store.py            # 老套件为自检脚本，逐个跑，末行 FAILURES: none 即过
 python3 tests/test_admission_outbox.py # 持久层：先存后做/幂等/退避/崩溃恢复
 python3 tests/test_e2e_m0.py           # 端到端：建票→派工→报告→回复→恢复
@@ -75,6 +75,17 @@ python3 tests/test_proactivity.py      # 开口阈值（M3）
 - [x] J3 校准闭环：calibration_loop.py——observe 攒事件 → 启发式/人工标注入 LabelStore →
       calibrate 出参数 → apply_calibration 达标才回写 ProactivityConfig 并解除 observe
       （不达标绝不动参数）；labels.jsonl append-only 可复读（test_j3_calibration_loop）
+- [x] K1 真实臂 sweep：sweep_bridge.py 加 run_real_sweep——single 臂（裸 worker 无治理）vs
+      dual 臂（Engine 全链）真跑 Magpie 网关（deepseek-v4.1-flash），2任务×2seeds×2臂=8 runs
+      真实 usage；delta_tokens=1654 vs 介入节省 4 次 → p*=0.0121 元/token、verdict=DUAL_WINS
+      （results/real/sweep_curve.json，诚实口径：介入价值 V=5.0 为假设参数）
+- [x] K2 真标注数据：12 真任务（合规/挑逗/闲聊）独立线程真跑，observe 攒 12 事件 →
+      close_loop 真校准 applied_params=(0.5,0.2,0.05)（precision 1.0 n_speak=3 trusted）；
+      诚实发现：confidence 同质化（单一证据源+watchdog 全 ok → 12 事件同置信度），
+      当前为方向性验证，非充分统计
+- [x] K3 择优修复（I5 缺口 C2）：calibration_best.py——calibrate_best 显式择优替代
+      "网格第一组"：样本量门（n_speak≥3 才 trusted，防 n_speak=1 撑不起 precision）+
+      (precision, n_speak, 保守度) 降序择优 + alternatives 全达标组审计（test_k3_calibration_best）
 
 ## 与同类项目的定位对比（2026-11-10，GitHub 星数为当日快照）
 
