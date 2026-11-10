@@ -115,6 +115,139 @@ def run_echo_sweep(tasks: list[dict], seeds: list[int],
     return out
 
 
+def run_real_sweep(tasks: list[dict], seeds: list[int],
+                   endpoint: str = "http://127.0.0.1:3425/v1/chat/completions",
+                   model: str = "deepseek-v4.1-flash",
+                   work_root: str = "/tmp/superagent-sweep",
+                   timeout: float = 45.0,
+                   max_tool_rounds: int = 2) -> list:
+    """K1 真实臂 sweep：同一批任务×seeds 在两臂下真跑网关。
+
+    single 臂：裸 worker（OpenAICompatExecutor 直调一次 tool-loop），
+      无 assessor / watchdog / 治理 —— 介入记账 2 次/任务（人自己研判+复核）。
+    dual 臂：Engine 全链（LLMAssessor 研判 + worker + Watchdog 复核 + 治理
+      挂点）—— 介入记账 1 次/任务（治理确定性拦截已由 J2/演示 ruling 证实）。
+    成本数字全部取自真 usage（MetricsLedger），返回 RunRecord 列表可直喂
+    sweep_curve()。
+    """
+    import time as _time
+    import os as _os
+    from agent.model import Input
+    from agent.store import Store
+    from agent.engine import Engine
+    from agent.admission import AdmissionConfig
+    from agent.governance import ScopeRegistry
+    from agent.watchdog import Watchdog
+    from agent.assessor import LLMAssessor
+    from agent.openai_executor import OpenAICompatExecutor
+    from agent.metrics import MetricsLedger
+
+    out = []
+    _os.makedirs(work_root, exist_ok=True)
+    for t in tasks:
+        for seed in seeds:
+            for arm in ("single", "dual"):
+                led = MetricsLedger()
+                run_dir = _os.path.join(work_root, f"{t['id']}-{arm}-{seed}")
+                _os.makedirs(run_dir, exist_ok=True)
+                target = _os.path.join(run_dir, "notes.md")
+                if arm == "single":
+                    ex = OpenAICompatExecutor(
+                        endpoint=endpoint, model=model, metrics=led,
+                        timeout=timeout, max_tool_rounds=max_tool_rounds)
+                    sid = f"single-{t['id']}-{seed}"
+                    ex.sessions[sid] = {"ticket_id": t["id"],
+                                        "mandate": None,
+                                        "messages": [{"role": "system",
+                                                      "content": ex.system_prompt}]}
+                    # 直接以 Input 形式投给 worker（绕过 admission：single 臂无治理）
+                    inp = Input(id=f"{t['id']}-single-{seed}",
+                                thread_key="direct", text=t["text"],
+                                is_human=True)
+                    ex.deliver(_fake_assignment(sid, t["id"]), inp)
+                    n_int = 2
+                else:
+                    engine, ex = _real_engine(endpoint, model, led, timeout,
+                                              max_tool_rounds, run_dir)
+                    inp = Input(id=f"{t['id']}-dual-{seed}",
+                                thread_key="inbox", text=t["text"],
+                                is_human=True)
+                    res = engine.intake(inp, mandate_rules=t["rules"])
+                    if res.get("disposition") == "accept":
+                        tid = res["ticket_id"]
+                        ticket = engine.tickets.get(tid)
+                        a = ticket.assignments[-1]
+                        _finish(engine, ex, a, tid, target)
+                    n_int = 1
+                rr = ledger_to_runrecord(
+                    led, run_id=f"{t['id']}-{arm}-{seed}", arm=arm,
+                    seed=seed, interventions=n_int)
+                out.append(rr)
+                print(f"  [{t['id']} {arm} seed{seed}] "
+                      f"tokens={rr.router_overhead_tokens + _worker_tokens(led)} "
+                      f"calls={len(led.records)}")
+    return out
+
+
+def _fake_assignment(session_id: str, ticket_id: str):
+    from agent.model import Assignment
+    return Assignment(ticket_id=ticket_id, session_id=session_id)
+
+
+def _worker_tokens(led) -> int:
+    return sum(c.prompt_tokens + c.completion_tokens for c in led.records
+               if c.kind == "worker")
+
+
+def _real_engine(endpoint, model, led, timeout, rounds, run_dir):
+    from agent.engine import Engine
+    from agent.store import Store
+    from agent.admission import AdmissionConfig
+    from agent.governance import ScopeRegistry
+    from agent.watchdog import Watchdog
+    from agent.assessor import LLMAssessor
+    from agent.openai_executor import OpenAICompatExecutor
+    from agent.proactivity import ProactivityEngine, ProactivityConfig
+    from agent.calibration import ConfidenceEstimator
+    import os as _os
+
+    ex = OpenAICompatExecutor(endpoint=endpoint, model=model, metrics=led,
+                              timeout=timeout, max_tool_rounds=rounds)
+    engine = Engine(
+        store=Store(_os.path.join(run_dir, "sweep.db")),
+        cfg=AdmissionConfig(whitelist=["inbox"]), executor=ex,
+        deliver=lambda ch, body: True, watchdog=Watchdog(),
+        governance=ScopeRegistry(),
+        proactivity=ProactivityEngine(ProactivityConfig(observe=True)),
+        assessor=LLMAssessor(model=model, endpoint=endpoint, timeout=30.0),
+        max_repairs=1, confidence_estimator=ConfidenceEstimator())
+    return engine, ex
+
+
+def _finish(engine, ex, a, tid, target):
+    """收报告：宿主代执行写动作（过治理），再喂 watchdog。"""
+    import json as _json, re as _re, os as _os
+    msgs = ex.sessions.get(a.session_id, {}).get("messages", [])
+    raw = ""
+    for m in reversed(msgs):
+        if m.get("role") == "assistant" and m.get("content"):
+            raw = m["content"]
+            break
+    report = {"summary": raw[:200], "touched_paths": []}
+    m = _re.search(r"\{.*\}", raw, _re.S)
+    if m:
+        try:
+            d = _json.loads(m.group(0))
+            if isinstance(d, dict):
+                d.setdefault("summary", raw[:200])
+                report = d
+        except _json.JSONDecodeError:
+            pass
+    for path in report.get("touched_paths") or []:
+        engine.pre_write(tid, path)
+    engine.on_worker_report(a, report)
+
+
 def sweep_curve(records: list[RunRecord],
                 value_per_intervention: float = 5.0,
                 price_per_token: float = 0.02) -> dict:

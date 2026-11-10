@@ -16,7 +16,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent.calibration import LabelStore, calibrate           # noqa: E402
+from agent.calibration import LabelStore                      # noqa: E402
+from agent.calibration_best import calibrate_best             # noqa: E402
 from agent.proactivity import ProactivityConfig               # noqa: E402
 
 
@@ -46,9 +47,12 @@ def ingest_observe_log(events: list[dict], store: LabelStore,
 
 
 def run_calibration(store: LabelStore,
-                    target_precision: float = 0.8) -> dict:
-    """标注 → 网格搜索。返回 calibrate() 原样结果（含 calibrated 标志）。"""
-    return calibrate(store.load(), target_precision=target_precision)
+                    target_precision: float = 0.8,
+                    min_speak: int = 3) -> dict:
+    """标注 → 全网格择优搜索（K3 修复 C2：样本量门 + (precision, n_speak,
+    保守度) 择优）。返回 calibrate_best() 原样结果（含 calibrated 标志）。"""
+    return calibrate_best(store.load(), target_precision=target_precision,
+                          min_speak=min_speak)
 
 
 def apply_calibration(cfg: ProactivityConfig, result: dict) -> bool:
