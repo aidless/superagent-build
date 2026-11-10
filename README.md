@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/superagent-build)](https://pypi.org/project/superagent-build/)
 [![Python](https://img.shields.io/pypi/pyversions/superagent-build)](https://pypi.org/project/superagent-build/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Tests](https://img.shields.io/badge/tests-16%20suites%20green-brightgreen)
+![Tests](https://img.shields.io/badge/tests-19%20suites%2080%20passed-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-success)
 
 > 定位：把 dsh-superagent-prototype（22k★）宣传了但没做的四件事真的做出来。
@@ -36,7 +36,7 @@ Input → intake（幂等 receipt）
 ## 运行自检（RED→GREEN 纪律：先注入违规证明会红，再验证放行）
 
 ```bash
-python3 -m pytest tests/ -q             # 新套件：i1_i4 / i2 / i3 / i5 / i6 / integration
+python3 -m pytest tests/ -q             # 80 passed：老 9 套件 + i1_i4/i2/i3/i5/i6/integration + j1/j2/j3/j4
 python3 tests/test_store.py            # 老套件为自检脚本，逐个跑，末行 FAILURES: none 即过
 python3 tests/test_admission_outbox.py # 持久层：先存后做/幂等/退避/崩溃恢复
 python3 tests/test_e2e_m0.py           # 端到端：建票→派工→报告→回复→恢复
@@ -63,8 +63,18 @@ python3 tests/test_proactivity.py      # 开口阈值（M3）
       LabelStore（observe 判定旁路自动攒标注）+ calibrate（网格搜索开口 precision≥0.8）（test_i5_calibration）
 - [x] I6 调度循环：scheduler.py——tick 驱动（max_workers 槽位/idle 超时回收/出站 pump），
       engine 交付后写 idle_at；无 sleep 无线程，clock 注入可测（test_i6_scheduler）
-- [ ] M4 成本对接：`../superagent-dig/02-cost-experiment/framework.py` 的 harness 适配器位
-      （metrics.py 的 CallRecord 已是同构对接面）
+- [x] M4 成本对接：sweep_bridge.py——MetricsLedger ↔ `../superagent-dig/02-cost-experiment/framework.py`
+      双向桥（ledger→RunRecord 映射 + router 税记账），盈亏数学（breakeven_price/
+      breakeven_attention/paired_bootstrap_ci/verdict）直接调任务②原函数（单一事实源）；
+      EchoExecutor 确定性双臂 sweep 出 p*/C*/三档判决曲线点（test_j4_sweep_bridge）
+- [x] J1 LLM judge：watchdog.py 加 LLMJudge（三值判决严格 JSON，幻觉判词/网络失败/解析失败
+      一律 UNASSESSABLE fail-closed，有界证据 4000 字符，judge 调用入成本账 kind="judge"）（test_j1_llm_judge）
+- [x] J2 真执行器：executing_executor.py——治理在执行路径内强制（write_file/append_file
+      必过 write_gate，BLOCK 不落盘且回填 BLOCK 事实给 worker；治理挂点缺位 fail-closed
+      拒一切写）；真写走 host_exec 可注入（test_j2_executing_executor）
+- [x] J3 校准闭环：calibration_loop.py——observe 攒事件 → 启发式/人工标注入 LabelStore →
+      calibrate 出参数 → apply_calibration 达标才回写 ProactivityConfig 并解除 observe
+      （不达标绝不动参数）；labels.jsonl append-only 可复读（test_j3_calibration_loop）
 
 ## 与同类项目的定位对比（2026-11-10，GitHub 星数为当日快照）
 

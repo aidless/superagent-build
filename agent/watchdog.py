@@ -14,9 +14,12 @@
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Protocol
+
+Transport = "callable-dict-to-dict"  # 类型别名占位：(dict)->dict
 
 from .model import Mandate
 
@@ -64,6 +67,139 @@ class ScriptedJudge:
             return self.table[key]
         # 未命中的 scenario 视为不反对（规则层仍然独立生效）
         return WatchdogVerdict.OK, []
+
+
+def _parse_judge_json(content: str) -> dict:
+    """容忍 markdown 代码栅栏，内容必须是合法 JSON 对象。"""
+    text = content.strip()
+    if text.startswith("```"):
+        body = text.strip("`").lstrip()
+        if body.lower().startswith("json"):
+            body = body[4:]
+        text = body.strip().rstrip("`").strip()
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("judge output is not a JSON object")
+    return data
+
+
+class LLMJudge:
+    """J1：真实语义层判官——LLM 对照 Mandate 检查"答非所问/跑偏"。
+
+    契约：
+    - 严格 JSON 输出 {"verdict": "ok"|"deviation"|"unassessable", "reasons": [...]}，
+      容忍 markdown 代码栅栏；判词必须 ∈ 三值，幻觉判词 → UNASSESSABLE（fail-closed）；
+    - 解析失败 / 网络异常 / 超时 → UNASSESSABLE（证据不足以判，绝不当 OK 放行）；
+    - 有界证据：mandate + report 拼接超 max_chars 时截断证据段（保头部）；
+    - 每次调用入 MetricsLedger（kind="judge"，与 worker/assessor 同口径全成本账）。
+    """
+
+    SYSTEM_PROMPT = (
+        "你是 agent 系统的 watchdog 语义层判官。给定任务授权（Mandate）与 worker 报告，"
+        "判断报告内容是否在授权范围内、是否答非所问。只输出严格 JSON 对象："
+        '{"verdict": "ok"|"deviation"|"unassessable", "reasons": ["..."]}。'
+        "deviation=报告显示做了授权外的事或没做授权内的事；"
+        "unassessable=证据不足以判断；不确定时选 unassessable，绝不臆断 ok。"
+    )
+
+    def __init__(self,
+                 model: str = "deepseek-v4.1-flash",
+                 endpoint: str = "http://127.0.0.1:3425/v1/chat/completions",
+                 api_key: str = "",
+                 timeout: float = 20.0,
+                 max_chars: int = 4000,
+                 transport: Optional["Transport"] = None,
+                 metrics: Optional[object] = None):
+        self.model = model
+        self.endpoint = endpoint
+        self.api_key = api_key
+        self.timeout = timeout
+        self.max_chars = max_chars
+        self.metrics = metrics
+        self._transport: Transport = (transport if transport is not None
+                                      else self._http_transport)
+
+    def _http_transport(self, payload: dict) -> dict:
+        import json as _json
+        import urllib.request
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        req = urllib.request.Request(
+            self.endpoint,
+            data=_json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers=headers, method="POST")
+        import time as _time
+        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"judge_endpoint_http_{resp.status}")
+            return _json.loads(resp.read().decode("utf-8"))
+
+    # ---------- 证据构造 ----------
+
+    def _build_evidence(self, mandate: Mandate, report_payload: dict) -> str:
+        import json as _json
+        head = (f"任务授权（Mandate）：task_text={mandate.task_text!r} "
+                f"rules={_json.dumps(mandate.rules or {}, ensure_ascii=False)}\n"
+                f"worker 报告：")
+        body = _json.dumps(report_payload, ensure_ascii=False, default=str)
+        budget = max(0, self.max_chars - len(head))
+        if len(body) > budget:
+            body = body[:budget] + "…[truncated]"
+        return head + body
+
+    # ---------- 成本入账 ----------
+
+    def _ledger_record(self, resp, t0: float, ok: bool) -> None:
+        import time as _time
+        if self.metrics is None:
+            return
+        from .metrics import CallRecord
+        usage = (resp or {}).get("usage") or {}
+        self.metrics.record(CallRecord(
+            session_id="judge", model=self.model,
+            prompt_tokens=int(usage.get("prompt_tokens", 0) or 0),
+            completion_tokens=int(usage.get("completion_tokens", 0) or 0),
+            latency_ms=(_time.monotonic() - t0) * 1000.0,
+            ok=ok, kind="judge", ticket_id=None))
+
+    # ---------- 判决 ----------
+
+    def judge(self, mandate: Mandate,
+              report_payload: dict) -> tuple[WatchdogVerdict, list[str]]:
+        import json as _json
+        import time as _time
+        prompt = (self._build_evidence(mandate, report_payload)
+                  + "\n\n只输出严格 JSON：{\"verdict\": \"ok\"|\"deviation\"|"
+                    "\"unassessable\", \"reasons\": [\"...\"]}。")
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": self.SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0,
+            "stream": False,
+        }
+        t0 = _time.monotonic()
+        try:
+            resp = self._transport(payload)
+            content = (resp.get("choices") or [{}])[0].get("message", {}).get("content")
+            if not isinstance(content, str):
+                raise ValueError("response missing content")
+            data = _parse_judge_json(content)
+            self._ledger_record(resp, t0, ok=True)
+        except Exception as e:  # 网络/解析失败 → fail-closed
+            self._ledger_record(None, t0, ok=False)
+            return WatchdogVerdict.UNASSESSABLE, [f"judge_unavailable: {type(e).__name__}: {e}"]
+
+        verdict = _norm_verdict(data.get("verdict"))
+        if data.get("verdict") not in ("ok", "deviation", "unassessable"):
+            # 幻觉判词：_norm_verdict 兜底成 UNASSESSABLE，但要在理由里点名
+            return WatchdogVerdict.UNASSESSABLE, [
+                f"judge_unavailable: hallucinated_verdict:{data.get('verdict')}"]
+        reasons = [str(r) for r in (data.get("reasons") or [])]
+        return verdict, reasons
 
 
 def _norm_verdict(v) -> WatchdogVerdict:
