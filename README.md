@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/superagent-build)](https://pypi.org/project/superagent-build/)
 [![Python](https://img.shields.io/pypi/pyversions/superagent-build)](https://pypi.org/project/superagent-build/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Tests](https://img.shields.io/badge/tests-21%20files%20203%20checks%20passed-brightgreen)
+![CI](https://github.com/aidless/superagent-build/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-21%20files%20203%20checks%20passed-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-success)
 
 > 定位：把 dsh-superagent-prototype（22k★）宣传了但没做的四件事真的做出来。
@@ -86,6 +86,10 @@ python3 tests/test_proactivity.py      # 开口阈值（M3）
 - [x] K3 择优修复（I5 缺口 C2）：calibration_best.py——calibrate_best 显式择优替代
       "网格第一组"：样本量门（n_speak≥3 才 trusted，防 n_speak=1 撑不起 precision）+
       (precision, n_speak, 保守度) 降序择优 + alternatives 全达标组审计（test_k3_calibration_best）
+
+## 溯源：先拆解，后自研
+
+本项目的分析底稿与架构依据来自对 [dsh-superagent-prototype](https://github.com/deepseek-ai/dsh-superagent-prototype) 的逐文件拆解（五卖点兑现度表、可靠性底座分析、成本模型），全文见姊妹仓库 [aidless/superagent-dig](https://github.com/aidless/superagent-dig)。
 
 ## 与同类项目的定位对比（2026-11-10，GitHub 星数为当日快照）
 
