@@ -20,8 +20,11 @@ import os
 import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_FW_DIR = os.path.abspath(os.path.join(_HERE, "..", "..", "superagent-dig",
-                                       "02-cost-experiment"))
+# vendor 副本优先（CI checkout 只有本仓）；本地 superagent-dig 工作区存在时回退原版
+_VENDOR = os.path.abspath(os.path.join(_HERE, "..", "vendor"))
+_DIGIT = os.path.abspath(os.path.join(_HERE, "..", "..", "superagent-dig",
+                                      "02-cost-experiment"))
+_FW_DIR = _VENDOR if os.path.exists(os.path.join(_VENDOR, "framework.py")) else _DIGIT
 if _FW_DIR not in sys.path:
     sys.path.insert(0, _FW_DIR)
 
