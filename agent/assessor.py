@@ -13,11 +13,13 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.request
 from typing import Callable, Optional
 
 from .admission import GateResult
+from .metrics import CallRecord
 from .model import Assessment, Input
 
 # transport: OpenAI chat completions 请求体 -> 响应体（可注入 fake 做零网络测试）
@@ -121,11 +123,13 @@ class LLMAssessor:
                  endpoint: str = "http://127.0.0.1:3425/v1/chat/completions",
                  api_key: str = "",
                  timeout: float = 20.0,
-                 transport: Optional[Transport] = None):
+                 transport: Optional[Transport] = None,
+                 metrics: Optional["object"] = None):
         self.model = model
         self.endpoint = endpoint
         self.api_key = api_key
         self.timeout = timeout
+        self.metrics = metrics  # MetricsLedger：研判调用逐次入账（成本全口径）
         self._transport: Transport = transport if transport is not None else self._http_transport
 
     # ---------- 默认 HTTP 传输（真实环境用；测试注入 fake 不走这里） ----------
@@ -144,6 +148,22 @@ class LLMAssessor:
             return json.loads(resp.read().decode("utf-8"))
 
     # ---------- 研判 ----------
+
+    def _ledger_record(self, inp: Input, resp, t0: float, ok: bool) -> None:
+        """研判调用逐次入成本账（kind=assessor，无票据归属留空）。"""
+        if self.metrics is None:
+            return
+        usage = (resp or {}).get("usage") or {}
+        self.metrics.record(CallRecord(
+            session_id=f"assessor:{inp.thread_key}",
+            model=self.model,
+            prompt_tokens=int(usage.get("prompt_tokens", 0) or 0),
+            completion_tokens=int(usage.get("completion_tokens", 0) or 0),
+            latency_ms=(time.monotonic() - t0) * 1000.0,
+            ok=ok,
+            kind="assessor",
+            ticket_id=None,
+        ))
 
     def __call__(self, inp: Input, gate_result: GateResult) -> Assessment:
         prompt = (
@@ -164,10 +184,13 @@ class LLMAssessor:
             "temperature": 0,
             "stream": False,
         }
+        t0 = time.monotonic()
         try:
             resp = self._transport(payload)
             data = _parse_strict_json(_extract_content(resp))
+            self._ledger_record(inp, resp, t0, ok=True)
         except Exception as e:  # 解析失败 / 网络异常 / 超时 → fail-closed
+            self._ledger_record(inp, None, t0, ok=False)
             return _fail_closed(gate_result, f"{type(e).__name__}: {e}")
 
         matched_rule = data.get("matched_rule")

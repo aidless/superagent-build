@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: pytest suites
+        run: python -m pytest tests/ -q
+      - name: script suites (RED→GREEN selftests)
+        run: |
+          for f in tests/test_store.py tests/test_admission_outbox.py \
+                   tests/test_watchdog.py tests/test_governance.py \
+                   tests/test_proactivity.py tests/test_e2e_m0.py \
+                   tests/test_e2e_m1.py tests/test_e2e_m2.py tests/test_e2e_m3.py; do
+            python3 "$f" > /dev/null
+          done
+          echo "all script suites passed"

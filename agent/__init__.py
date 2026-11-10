@@ -12,3 +12,38 @@
     watchdog.py     跑偏检测（规则层 + judge）
     proactivity.py  主动性开口阈值（p*(t)，observe 模式）
 """
+
+# 延迟导出核心 API（保持 import agent 零副作用、零依赖）
+from __future__ import annotations
+
+
+def __getattr__(name: str):
+    _lazy = {
+        "Engine": ("agent.engine", "Engine"),
+        "EngineConfig": ("agent.engine", "EngineConfig"),
+        "AdmissionConfig": ("agent.admission", "AdmissionConfig"),
+        "Tickets": ("agent.tickets", "Tickets"),
+        "Thread": ("agent.model", "Thread"),
+        "Ticket": ("agent.model", "Ticket"),
+        "Mandate": ("agent.model", "Mandate"),
+        "Input": ("agent.model", "Input"),
+        "ScopeRegistry": ("agent.governance", "ScopeRegistry"),
+        "Watchdog": ("agent.watchdog", "Watchdog"),
+        "WatchdogVerdict": ("agent.watchdog", "WatchdogVerdict"),
+        "ProactivityEngine": ("agent.proactivity", "ProactivityEngine"),
+        "ProactivityConfig": ("agent.proactivity", "ProactivityConfig"),
+        "OpenAICompatExecutor": ("agent.openai_executor", "OpenAICompatExecutor"),
+        "EchoExecutor": ("agent.executor", "EchoExecutor"),
+        "LLMAssessor": ("agent.assessor", "LLMAssessor"),
+        "MetricsLedger": ("agent.metrics", "MetricsLedger"),
+        "CallRecord": ("agent.metrics", "CallRecord"),
+        "Scheduler": ("agent.scheduler", "Scheduler"),
+        "SchedulerConfig": ("agent.scheduler", "SchedulerConfig"),
+        "Outbox": ("agent.outbox", "Outbox"),
+        "Store": ("agent.store", "Store"),
+    }
+    if name in _lazy:
+        import importlib
+        mod = importlib.import_module(_lazy[name][0])
+        return getattr(mod, _lazy[name][1])
+    raise AttributeError(f"agent has no attribute {name!r}")

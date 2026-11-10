@@ -11,6 +11,13 @@ from .model import Assignment, Input, Ticket
 
 
 class WorkerExecutor(Protocol):
+    """worker 会话抽象。
+
+    调用契约：`launch` 先建立会话再 `deliver` 投递；但实现方**必须容忍**
+    deliver 独立于 launch 被调用（懒登记）——Engine 的恢复/回灌路径可能
+    在新进程里先 deliver。`resume` 用于崩溃恢复探测。
+    """
+
     def launch(self, assignment: Assignment, ticket: Ticket) -> str:
         """启动 worker 会话，返回 session 标识。"""
     def deliver(self, assignment: Assignment, inp: Input) -> bool:

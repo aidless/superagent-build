@@ -15,6 +15,8 @@ class CallRecord:
     completion_tokens: int
     latency_ms: float
     ok: bool
+    kind: str = "worker"        # 调用方角色：worker / assessor / judge ...
+    ticket_id: str | None = None  # 关联票号（研判类调用可空）
 
 
 class MetricsLedger:
@@ -37,6 +39,9 @@ class MetricsLedger:
             "failed_calls": calls - ok_calls,
             "success_rate": (ok_calls / calls) if calls else 0.0,
             "total_prompt_tokens": prompt_tokens,
+            "calls_by_kind": {
+                k: sum(1 for r in self.records if r.kind == k)
+                for k in sorted({r.kind for r in self.records})},
             "total_completion_tokens": completion_tokens,
             "total_tokens": prompt_tokens + completion_tokens,
         }

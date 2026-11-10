@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/superagent-build)](https://pypi.org/project/superagent-build/)
 [![Python](https://img.shields.io/pypi/pyversions/superagent-build)](https://pypi.org/project/superagent-build/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Tests](https://img.shields.io/badge/tests-15%20suites%20green-brightgreen)
+![Tests](https://img.shields.io/badge/tests-16%20suites%20green-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-success)
 
 > 定位：把 dsh-superagent-prototype（22k★）宣传了但没做的四件事真的做出来。
@@ -65,6 +65,20 @@ python3 tests/test_proactivity.py      # 开口阈值（M3）
       engine 交付后写 idle_at；无 sleep 无线程，clock 注入可测（test_i6_scheduler）
 - [ ] M4 成本对接：`../superagent-dig/02-cost-experiment/framework.py` 的 harness 适配器位
       （metrics.py 的 CallRecord 已是同构对接面）
+
+## 与同类项目的定位对比（2026-11-10，GitHub 星数为当日快照）
+
+| 项目 | ★ | 定位 | 与本项目的差异 |
+|---|---|---|---|
+| [deepseek-ai/dsh-superagent-prototype](https://github.com/deepseek-ai/dsh-superagent-prototype) | 22.0k | 双层异步原型（宣传稿） | 本项目把其"宣传了但没做"的四件事（watchdog/文件级治理/主动阈值/调度）做出来并测出来 |
+| [chunonesoft/open-superagent](https://github.com/chunonesoft/open-superagent) | 5 | 同原型的主动式编程智能体（GitLab/钉钉） | 走通道集成路线；本项目走"可测内核+治理确定性证据"路线 |
+| [ruijh/dsh-superagent-prototype-analysis](https://github.com/ruijh/dsh-superagent-prototype-analysis) | 3 | 原型 49 图可视化分析 | 只分析不实现；本项目=分析+自研实现+真网关验证 |
+| [openai/openai-agents-python](https://github.com/openai/openai-agents-python) | 30.6k | 多代理工作流框架 | 通用编排无治理确定性；本项目每层有 fail-closed 铁律与 RED→GREEN 证明 |
+| [MetaGPT](https://github.com/FoundationAgents/MetaGPT) | 71.2k | SOP 多代理软件公司 | 重角色分工轻可靠性底座；本项目重 outbox 三角/崩溃恢复/成本全口径账 |
+| [litellm](https://github.com/BerriAI/litellm) | 63.0k | LLM 网关+guardrails | 治理在网关层按请求拦截；本项目治理在**任务语义层**（Mandate 边界+写前裁决+跑偏复核） |
+
+**生态位**：不是又一个编排框架——是"把 Super Agent 原型欠下的可靠性账补齐"的可测内核：
+两级准入防幻觉铁律、先存后做投递、写作用域确定性拦截、跑偏复审环、开口阈值+校准、逐调用成本账（worker+assessor 全口径）。
 
 ## 真网关点火记录（2026-11-10，Magpie `deepseek-v4.1-flash`）
 

@@ -132,15 +132,52 @@ class OpenAICompatExecutor:
                     })
                 rounds += 1
                 continue
-            # 收尾：文本回复入会话
+            # 报告契约硬化：收尾不是报告 JSON 时，追问一轮（上限 1 次）
+            final_text = msg.get("content", "")
+            if not self._is_report(final_text):
+                sess["messages"].append({"role": "assistant",
+                                         "content": final_text})
+                sess["messages"].append({
+                    "role": "user",
+                    "content": "请只输出最终报告 JSON 对象（含 summary 与 "
+                               "touched_paths 字段），不要输出其他文字。"})
+                t0 = time.monotonic()
+                try:
+                    resp = self._transport(payload)
+                except Exception:
+                    self._record(assignment, None, t0, ok=False)
+                    return False
+                choices2 = resp.get("choices")
+                msg2 = (choices2[0].get("message") if choices2 else None) or {}
+                if not choices2 or not isinstance(msg2, dict):
+                    self._record(assignment, resp, t0, ok=False)
+                    return False
+                self._record(assignment, resp, t0, ok=True)
+                final_text = msg2.get("content", "") or final_text
+            # 收尾：最终文本入会话
             sess["messages"].append({"role": "assistant",
-                                     "content": msg.get("content", "")})
+                                     "content": final_text})
             return True
 
     def resume(self, assignment: Assignment) -> bool:
         return assignment.session_id in self.sessions
 
     # ---------- 内部 ----------
+
+    @staticmethod
+    def _is_report(text: str) -> bool:
+        """收尾判定：最后一屏是否已经是报告 JSON（含 summary 键）。"""
+        t = (text or "").strip()
+        if t.startswith("```"):
+            body = t.strip("`").lstrip()
+            if body.lower().startswith("json"):
+                body = body[4:]
+            t = body.strip().rstrip("`").strip()
+        try:
+            data = json.loads(t)
+        except (ValueError, TypeError):
+            return False
+        return isinstance(data, dict) and "summary" in data
 
     def _record(self, assignment: Assignment, resp: Optional[dict],
                 t0: float, ok: bool) -> None:
@@ -152,6 +189,8 @@ class OpenAICompatExecutor:
             completion_tokens=int(usage.get("completion_tokens", 0) or 0),
             latency_ms=(time.monotonic() - t0) * 1000.0,
             ok=ok,
+            kind="worker",
+            ticket_id=assignment.ticket_id,
         ))
 
     def _next_session_id(self) -> str:

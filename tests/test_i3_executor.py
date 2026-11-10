@@ -80,7 +80,8 @@ def test_executor_launch_registers_and_resume():
 def test_executor_deliver_records_usage():
     led = MetricsLedger()
     ex = OpenAICompatExecutor(
-        transport=lambda p: _resp("done", usage={"prompt_tokens": 10, "completion_tokens": 5}),
+        transport=lambda p: _resp('{"summary": "done", "touched_paths": []}',
+                                  usage={"prompt_tokens": 10, "completion_tokens": 5}),
         metrics=led)
     ok = ex.deliver(_mk_assignment("sess-9"),
                     Input(id="in1", thread_key="t", text="干活"))
@@ -125,7 +126,8 @@ def test_executor_tool_loop_and_missing_usage_zero():
         _resp("", tool_calls=[{"id": "call1", "type": "function",
                                "function": {"name": "pre_write",
                                             "arguments": "{\"path\":\"src/x.py\"}"}}]),
-        _resp("finished", usage={"prompt_tokens": 3, "completion_tokens": 2}),
+        _resp('{"summary": "finished", "touched_paths": []}',
+              usage={"prompt_tokens": 3, "completion_tokens": 2}),
     ]
     payloads = []
 
