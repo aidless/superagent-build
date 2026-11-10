@@ -1,5 +1,11 @@
 # superagent-build — 自研 Super Agent（治理内嵌 + Watchdog + 主动阈值）
 
+[![PyPI](https://img.shields.io/pypi/v/superagent-build)](https://pypi.org/project/superagent-build/)
+[![Python](https://img.shields.io/pypi/pyversions/superagent-build)](https://pypi.org/project/superagent-build/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Tests](https://img.shields.io/badge/tests-15%20suites%20green-brightgreen)
+![Dependencies](https://img.shields.io/badge/dependencies-none-success)
+
 > 定位：把 dsh-superagent-prototype（22k★）宣传了但没做的四件事真的做出来。
 > 证据链：拆解报告见 `../superagent-dig/01-prototype-dissection.md`（文章卖点兑现度表）。
 
