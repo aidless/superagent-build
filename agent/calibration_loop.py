@@ -78,19 +78,50 @@ def apply_calibration(cfg: ProactivityConfig, result: dict) -> bool:
     return True
 
 
+def load_calibrated_cfg(report: dict) -> ProactivityConfig:
+    """从落盘的 close_loop 报告构造可服役的 ProactivityConfig（P1-A 接线）。
+
+    只有报告明确达标（calibrated=True）且带 applied_params 三键时才解除
+    observe；伪造/未达标报告一律返回默认（observe=True）配置——fail-closed
+    与 apply_calibration 同一条纪律：宁可继续只观察，也不拿没验过的参数开口。
+    """
+    cfg = ProactivityConfig()
+    result = report.get("calibration") or {}
+    if not result.get("calibrated"):
+        return cfg
+    params = report.get("applied_params") or {}
+    if not all(k in params for k in ("c_false", "c_speak", "lam")):
+        return cfg
+    applied = apply_calibration(cfg, {**params, "calibrated": True})
+    return cfg if applied else ProactivityConfig()
+
+
 def close_loop(observe_events: list[dict], state_dir: str,
-               target_precision: float = 0.8, labeler=None) -> dict:
-    """端到端：攒事件 → 标注入库 → 校准 → （达标则）出可应用参数。
+               target_precision: float = 0.8, labeler=None,
+               cfg: ProactivityConfig = None,
+               apply: bool = False) -> dict:
+    """端到端：攒事件 → 标注入库 → 校准 → （达标且 apply=True）真回写。
+
     labeler 缺省用 heuristic_label；传自定义可做人工覆写（见 service/
     run_d4_calibration.py 的 wait_bad 金标）。
-    返回 {"n_labeled", "stats", "calibration", "applied_params"(可选)}。
+    cfg 为要服役的 ProactivityConfig（通常就是 Engine.proactivity.cfg）；
+    apply=False 时只出报告、绝不改配置（老契约）。apply=True 且达标时调
+    apply_calibration 回写三参数并解除 observe；INELIGIBLE/未达标批次一律
+    不动配置。返回 {"n_labeled", "stats", "calibration", "applied",
+    "applied_params"(可选)}。
     """
+    if apply and cfg is None:
+        raise ValueError("apply_requires_cfg: 回写校准参数必须给出服役中的 "
+                         "ProactivityConfig，否则解除 observe 无处生效")
     store = LabelStore(path=os.path.join(state_dir, "labels.jsonl"))
     n = ingest_observe_log(observe_events, store, labeler=labeler)
     stats = store.stats()
     result = run_calibration(store, target_precision=target_precision)
-    out = {"n_labeled": n, "stats": stats, "calibration": result}
+    out = {"n_labeled": n, "stats": stats, "calibration": result,
+           "applied": False}
     if result.get("calibrated"):
         out["applied_params"] = {k: result[k] for k in
                                  ("c_false", "c_speak", "lam")}
+        if apply:
+            out["applied"] = apply_calibration(cfg, result)
     return out

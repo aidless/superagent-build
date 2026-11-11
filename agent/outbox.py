@@ -43,6 +43,13 @@ def pump(store: Store, now: float, deliver: Deliverer,
             store.abandon(msg["message_id"], "channelIgnored")
             stats["abandoned"] += 1
             continue
+        except Exception:
+            # S5 收口：docstring 早就承诺"抛其他异常 → 退避重试"，此前只有
+            # 两个合法放弃被捕获、其它异常直接外泄出 pump。现在按同一退避规则
+            # 重试（不静默丢弃，也不放弃），ChannelGone/Ignored 仍是唯二放弃。
+            store.mark_retry(msg["message_id"], now + backoff_next(msg["attempts"]))
+            stats["retried"] += 1
+            continue
         if ok:
             store.mark_sent(msg["message_id"])
             stats["sent"] += 1

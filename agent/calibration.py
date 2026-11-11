@@ -106,6 +106,38 @@ def _norm_extended(key: str, value) -> float:
     return 0.5
 
 
+def build_completion_evidence(ctx: dict) -> dict:
+    """完成侧多维证据构造器（P1-A：修 K2 的 confidence 同质化）。
+
+    ctx 由 Engine.on_worker_report 组装，键：
+      verdict_label / report_payload / ticket / assignment / text / repairs
+    返回的 dict 同时含基础源 ``watchdog_pass`` 与六个扩展源；一旦出现扩展
+    键，ConfidenceEstimator.estimate 就走扩维合成，不同文本长度、工具轮数、
+    修复次数会给出不同 confidence——不再是恒定的 0.533。
+
+    纯函数：不读时钟、不碰 store、不调网络，便于回放与逐字复算。
+    """
+    from .admission import AdmissionConfig  # 延迟导入，单一真相源：显式指令前缀
+
+    text = str(ctx.get("text", "") or "")
+    payload = ctx.get("report_payload") or {}
+    verdict = str(ctx.get("verdict_label", "unknown"))
+    ticket = ctx.get("ticket")
+    inputs = list(getattr(ticket, "inputs", []) or [])
+    markers = AdmissionConfig().explicit_markers
+    return {
+        "watchdog_pass": 1.0 if verdict == "ok" else 0.0,
+        "watchdog_verdict": verdict,
+        "has_explicit_marker": any(m in text for m in markers),
+        "is_bot": bool(inputs and inputs[0].is_bot),
+        "text_len": len(text),
+        # 报告自带 tool_rounds 优先；否则用 engine 记账的真实调用数（tool_calls）
+        "tool_rounds": int(payload.get("tool_rounds",
+                                       ctx.get("tool_calls", 0)) or 0),
+        "repairs": int(ctx.get("repairs", 0) or 0),
+    }
+
+
 class ConfidenceEstimator:
     """证据源 → 确证度 p ∈ [0,1] 的合成器。
 

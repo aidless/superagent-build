@@ -71,18 +71,21 @@ def gate(inp: Input, cfg: AdmissionConfig,
 
 def validate_assessment(a: Assessment, gate_result: GateResult) -> tuple[bool, str]:
     """返回 (ok, reason)。ok=False 时调用方必须拒绝 accept（fail-closed）。"""
-    # 铁律1：matched_rule 恰好一条
+    # 铁律1：matched_rule 必须是 gate 实际输出规则中的恰好一条
     if a.matched_rule is None or not isinstance(a.matched_rule, str):
         return False, "missing_rule"
     # 铁律2：accept 必须 intent_evidence 非空
     if a.accepted and not a.intent_evidence.strip():
         return False, "accept_without_evidence"
-    # 铁律3：研判引用的规则必须来自 gate 实际输出（防幻觉规则名）
-    if a.matched_rule not in gate_result.matched_rules:
-        return False, f"hallucinated_rule:{a.matched_rule}"
-    # deny 不需要证据，但 accept + broadcast 路由不允许（broadcast 无授权）
+    # 铁律4（§8-4 收口）：broadcast 无授权，accept 一律拒。必须排在
+    # 幻觉规则名检查之前——gate 对 broadcast 返回空 matched_rules，
+    # 旧顺序会先命中 hallucinated_rule 使这条分支永远不可达。
     if a.accepted and gate_result.route == "broadcast":
         return False, "accept_on_broadcast"
+    # 铁律3：研判引用的规则必须恰好命中 gate 实际输出的一条（防幻觉规则名）
+    hits = [r for r in gate_result.matched_rules if r == a.matched_rule]
+    if len(hits) != 1:
+        return False, f"hallucinated_rule:{a.matched_rule}"
     return True, "ok"
 
 

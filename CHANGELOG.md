@@ -1,4 +1,6 @@
-## v0.3.2 (main HEAD, unreleased) — 2026-11-10
+## v0.3.2 — 2026-11-11
+
+2026-11-10
 
 外部口径止血：PyPI 0.1.0 → **0.3.1**（twine 上传，`pypi.org/pypi/superagent-build/json` 验号 latest=0.3.1）。
 
@@ -12,11 +14,56 @@
 - `evidence/` 证据包：9 文件 + `MANIFEST.sha256`（`sha256sum -c` 兼容）+
   `REPRODUCE.md`；篡改即 `ok:false`，CI 增设 verify 步骤。
 
+治理 §8 差异七处实修（M23..M29，全部带行号锚点写进规范）：
+- 无 metrics 时票级预算闸 `fail-closed 拒收`（`agent/engine.py:95`，
+  `ValueError("budget_requires_metrics: ...")`）——没有计量就没有硬闸。
+- escalate 的一次性 lift 现在能在写路径真被消费：`ExecutingToolLoopExecutor`
+  按 `inspect.signature` 判定 gate 是否收内容哈希，三参时传
+  `sha256(content)`（`agent/executing_executor.py:187` `_gate_allows`）。
+- `Watchdog(judge=None, rules_check=False)` 构造即 `ValueError("no_checks: ...")`
+  （`agent/watchdog.py:242`）——没有判据的 watchdog 会把任何报告判成 OK。
+- outbox 非通道异常不再外泄：退避重试并入 `stats["retried"]`（`agent/outbox.py:46`）。
+- `Scheduler` idle 回收落 `IDLE_TIMEOUT` 判决（`agent/scheduler.py:121`，
+  `reason: idle_timeout` 走词表统一入口）。
+- `accept_on_broadcast` 校验分支可达：校验顺序改为先判广播再判幻觉规则名
+  （`agent/admission.py:84`），同时补齐"恰好命中一条规则"的文档语义。
+- `scopes.json` 落盘改旧态快照 + 原子替换：`.scopes.lock` + `flock` +
+  `scopes.json.bak` + `tempfile.mkstemp`/`os.replace`（`agent/governance.py:105`）。
+- 规范同步：§6 M1..M29、§7 S4/S5/S6/S8 标已收口、§8 整节改"发版内全量收口"
+  逐条 RESOLVED 并列出仍存活的 5 条设计边界、§9 两条复算命令。
+- 测试：新增 `tests/test_v033_section8.py` 7 条（每条先 RED）；
+  `tests/test_watchdog.py` 旧 GREEN4 语义变更（无判据构造从"放行"改"拒绝"）。
+
+校准闭环回写（P1-A）：
+- `agent/calibration_loop.py`：`close_loop(..., cfg=..., apply=True)` 达标即
+  `apply_calibration()` 写回 `c_false/c_speak/lam` 并解除 `observe`；新增
+  `load_calibrated_cfg(report)` 从已落盘报告建配置，`calibrated` 不为真或三键
+  不全则回落 `observe=True`（fail-closed）；`apply=True` 缺 `cfg` 直接
+  `ValueError("apply_requires_cfg: ...")`。
+- `agent/calibration.py`：新增 `build_completion_evidence(ctx)` 纯函数（六维证据）。
+- `agent/engine.py`：`Engine(completion_evidence=...)` 注入式扩维；解除 `observe`
+  后的开口落 `notices(effect=proactive_speak)` + store kv `proactive:{event_id}`。
+  不注入时逐字保持旧单键口径（`tests/test_integration.py:52` 精确断言未动）。
+- `tests/test_p1a_calibration_apply.py` 8 条（RED 7 failed / 1 passed 起步）。
+
+服役批三臂真跑（P1-B，Magpie `workbuddy/deepseek-v4.1-flash`）：
+- `service/run_daily_batch.py` 新增 `--completion-evidence` / `--apply-calibration` /
+  `--model` 与每臂事件独立落盘 `results/real/observe_{date}.jsonl`。
+- 臂 1 同构 10 任务：7 calls / 3700 tokens / 10 events / 完成侧 0.6133、0.6267。
+- 臂 2 异构 6 任务：6 calls / 5896 tokens / 6 events / 同两档 + 输入侧 0.48、0.51。
+- 臂 3 校准回写后 observe=False：6 calls / 4225 tokens / observe 事件 0 /
+  **开口 4 条**（conf 0.6133×2、0.6267×2，p*=0.208333）。
+- `service/make_p1b_report.py` → `results/real/p1b/summary.json`（可复算，含
+  per_speak 逐条与 4 条 caveats：开口未复核 / 档位窄 / 沿用单键校准 / repairs 未激活）。
+- 网关事故记录：裸模型名 `deepseek-v4.1-flash` 落到配额耗尽 provider
+  （HTTP 429 + `Retry-After: 685146`），批量任务改为显式 `provider/model`。
+
 治理契约机器可读化：
 - `docs/spec/GOVERNANCE.md`：RFC2119、8 干预点覆盖表（5 处诚实留白）、
-  ALLOW/BLOCK/ESCALATE 闭合集、REASONS 八词、**M1..M22** 每条 MUST 配
-  conformance 测试、S1..S8 偏差表、11 条规范-实现差异清单。
-- `tests/test_conformance.py`：23 条测试，每条内部 RED→GREEN。
+  ALLOW/BLOCK/ESCALATE 闭合集、REASONS 八词、**M1..M29** 每条 MUST 配
+  conformance 测试（30 条：23 conformance + 7 §8）、S1..S8 偏差表。
+- `tests/test_conformance.py`：23 条测试，每条内部 RED→GREEN；
+  `tests/test_v033_section8.py`：7 条 §8 实修回归（RED→GREEN）。
 - `docs/adr/ADR-0001-fail-closed.md`：fail-closed 不许做成开关；收口真偏差 S3
   （`pre_write` 治理挂点缺位曾 `return True` → BLOCK + 判决留痕，M22 守住）。
 

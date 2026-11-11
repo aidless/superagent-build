@@ -33,6 +33,8 @@ from pathlib import Path
 
 @dataclass
 class CheckResult:
+    # check() 的判决闭合集只有两个值；ESCALATE 不是第三个返回值，
+    # 它由 ruling 流的 "ESCALATION_REQUESTED" / "ESCALATE_LIFTED" 承载（§2）。
     verdict: str  # "ALLOW" | "BLOCK"
     reason: str
 
@@ -82,13 +84,37 @@ class ScopeRegistry:
         return json.loads(self._scopes_path().read_text(encoding="utf-8"))
 
     def _save_scopes(self) -> None:
+        """写登记表（§8-6 收口）。
+
+        旧实现用 open(..., "w") 截断整文件重写：崩溃窗口里会留下半截 JSON，
+        且旧状态无痕。现在改为：独立锁文件 flock → 写前把上一版完整快照
+        复制成 scopes.json.bak → 同目录临时文件 + os.replace 原子替换。
+        append-only 的语义仍只属于 rulings.jsonl；scopes.json 是"当前态"
+        快照，bak 保留的是上一次的当前态，供审计回溯（不是事件流）。
+        """
         if not self.state_dir:
             return
+        self.state_dir.mkdir(parents=True, exist_ok=True)
         data = json.dumps(self._scopes, ensure_ascii=False, indent=2)
-        with open(self._scopes_path(), "w", encoding="utf-8") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            f.write(data)
-            fcntl.flock(f, fcntl.LOCK_UN)
+        lock_fd = os.open(self.state_dir / ".scopes.lock",
+                          os.O_WRONLY | os.O_CREAT, 0o644)
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            target = self._scopes_path()
+            if target.exists():
+                shutil.copyfile(target, self.state_dir / "scopes.json.bak")
+            fd, tmp = tempfile.mkstemp(prefix=".scopes-", suffix=".tmp",
+                                       dir=str(self.state_dir))
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(data)
+                os.replace(tmp, target)
+            finally:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        finally:
+            os.close(lock_fd)
 
     # ---- 对外 API（编排层按此调用） ----
 

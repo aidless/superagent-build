@@ -113,6 +113,13 @@ class Scheduler:
             # 记 idle 超时并落盘（Engine 唯一写者豁免：直接改对象 + _persist）
             a.report = "idle_timeout"
             self.engine.tickets._persist(t)
+            # S8 收口：idle 回收也是一条治理判决，reason 用 REASONS 词表内
+            # 的 "idle_timeout"（此前这个词只存在于词表，判决流里零使用）。
+            ruler = getattr(self.engine, "_ruling", None)
+            if ruler is not None:
+                ruler({"ticket_id": tid, "verdict": "IDLE_TIMEOUT",
+                       "reason": "idle_timeout", "session_id": a.session_id,
+                       "idle_at": a.idle_at, "now": now})
             # 重开一次派工：launch 拿新 session 回填，重投仍是 undelivered 的输入
             a.session_id = self.engine.executor.launch(a, t)
             for iid in list(t.undelivered):

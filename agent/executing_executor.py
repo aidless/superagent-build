@@ -1,9 +1,10 @@
 """J2：真执行器——tool-loop 内真执行工具，治理在执行路径内强制。
 
 与 OpenAICompatExecutor（对话式，工具占位回填）的区别：
-- pre_write 语义落地为真实裁决：write_gate(ticket_id, path) 返回 False 时
-  不落盘，tool 回填 BLOCK 事实（worker 可见），且 host_exec 永不触发；
-- write_file / append_file 在 ALLOW 后经 host_exec 真执行；
+- pre_write 语义落地为真实裁决：write_gate(ticket_id, path[, content_hash]) 返回
+  False 时不落盘，tool 回填 BLOCK 事实（worker 可见），且 host_exec 永不触发；
+- write_file / append_file 在 ALLOW 后经 host_exec 真执行；写路径会把
+  sha256(content) 传进 write_gate，让 escalate 一次性 lift 能被真实消费（S6）；
 - 未知工具一律拒绝（unknown_tool），不抛异常（fail-closed，回填错误事实）；
 - 无 write_gate 时所有写工具拒绝（write_gate_required）——治理缺位宁可不动手。
 
@@ -12,6 +13,8 @@ host_exec(op, path, content) -> bool：宿主执行钩子，测试注入替代�
 """
 from __future__ import annotations
 
+import hashlib
+import inspect
 import json
 import re
 import time
@@ -23,7 +26,31 @@ from .model import Assignment, Input, Mandate, Ticket
 
 Transport = Callable[[dict], dict]
 HostExec = Callable[[str, str, str], bool]   # (op, path, content) -> bool
-WriteGate = Callable[[str, str], bool]       # (ticket_id, path) -> bool
+# (ticket_id, path) -> bool 旧协议；(ticket_id, path, content_hash) -> bool 新协议。
+# 构造时按签名探测，老的两参 gate（大量既有测试/服务脚本）零改动继续可用。
+WriteGate = Callable[..., bool]
+
+
+def _gate_takes_hash(gate: Optional[WriteGate]) -> bool:
+    """gate 是否接受第三参 content_hash：按签名数位置参数判断。
+
+    Engine.pre_write(self, ticket_id, path, content_hash=None) 绑定后是 3 参；
+    老的两参 lambda 是 2 参。带 *args 的 gate 按 2 参处理（兼容旧调用）。
+    """
+    if gate is None:
+        return False
+    try:
+        sig = inspect.signature(gate)
+    except (TypeError, ValueError):
+        return False
+    positional = [p for p in sig.parameters.values()
+                  if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+    return len(positional) >= 3
+
+
+def _content_hash(content: str) -> str:
+    """与 ScopeRegistry.request_escalation 的 content_hash 口径逐字一致。"""
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
 def _default_host_exec(op: str, path: str, content: str) -> bool:
@@ -88,6 +115,9 @@ class ExecutingToolLoopExecutor:
         self.metrics = metrics if metrics is not None else MetricsLedger()
         self.host_exec = host_exec if host_exec is not None else _default_host_exec
         self.write_gate = write_gate
+        # S6：按真实签名探测 gate 是否收 content_hash（不能用 try/except
+        # TypeError 兜底——gate 内部抛的 TypeError 会被误判成"老协议"）。
+        self._gate_takes_hash = _gate_takes_hash(write_gate)
         # session_id -> ticket_id（治理挂点按票查）；默认从 launch 时的登记取
         self._ticket_of = ticket_of
         self.max_tool_rounds = max_tool_rounds
@@ -136,7 +166,8 @@ class ExecutingToolLoopExecutor:
         if name == "pre_write":
             # 兼容旧协议：单独的 pre_write 询问（不落盘，只裁决）
             path = str(args.get("path", ""))
-            allowed = bool(self.write_gate) and self.write_gate(tid, path)
+            allowed = (bool(self.write_gate)
+                       and self._gate_allows(tid, path, None))
             return f"[governance] pre_write {path} -> {'OK' if allowed else 'BLOCK'}"
         if name in ("write_file", "append_file"):
             path = str(args.get("path", ""))
@@ -144,13 +175,23 @@ class ExecutingToolLoopExecutor:
             if self.write_gate is None:
                 return ("[governance] BLOCK: write_gate_required "
                         "(治理挂点缺位，fail-closed 拒绝一切写操作)")
-            if not self.write_gate(tid, path):
+            # S6：把内容哈希传进治理挂点，escalate 的一次性 lift 才消费得到。
+            if not self._gate_allows(tid, path, _content_hash(content)):
                 return f"[governance] BLOCK: {path} (未过治理，禁止落盘)"
             op = "write" if name == "write_file" else "append"
             ok = self.host_exec(op, path, content)
             return (f"[governance] OK: {path} {'written' if ok else 'host_exec_failed'}"
                     if ok else f"[governance] OK granted but host_exec failed: {path}")
         return f"[governance] error: unknown_tool:{name}"
+
+    def _gate_allows(self, tid: str, path: str,
+                     content_hash: Optional[str]) -> bool:
+        """按构造时探测的协议调用 write_gate（两参/三参都支持）。"""
+        if self.write_gate is None:
+            return False
+        if self._gate_takes_hash:
+            return bool(self.write_gate(tid, path, content_hash))
+        return bool(self.write_gate(tid, path))
 
     def deliver(self, assignment: Assignment, inp: Input) -> bool:
         sess = self.sessions.get(assignment.session_id)

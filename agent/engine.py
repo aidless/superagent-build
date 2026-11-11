@@ -38,7 +38,11 @@ class Engine:
                  assessor=None, max_repairs: int = 1,
                  confidence_estimator=None,
                  input_event_evidence: Optional[dict] = None,
-                 max_review_failures: int = 3):
+                 max_review_failures: int = 3,
+                  completion_evidence=None):
+        """completion_evidence: 可选 (ctx: dict) -> evidence dict 构造器。
+        缺省 None 时完成侧逐字保持旧单键口径；注入后走多维证据
+        （修 K2 的 confidence 同质化）并在 observe_log 附完整证据。"""
         self.store = store
         self.cfg = cfg
         self.executor = executor
@@ -53,6 +57,8 @@ class Engine:
         self.input_event_evidence = input_event_evidence
         # D2：连续 watchdog 非 OK 报告上限（对齐 AO autoreview 的 3）
         self.max_review_failures = max_review_failures
+        # P1-A：完成侧证据构造器（None=旧单键口径逐字不变）
+        self.completion_evidence = completion_evidence
         self.tickets = Tickets(store)
         # 修复计数存 store kv "repairs:{tid}"（唯一事实源，v0.3.1 修复）：
         # 内存 dict 在崩溃恢复后清零 → max_repairs 形同虚设（RED 见 test_v031）
@@ -85,7 +91,15 @@ class Engine:
         建 Mandate 时带上——治理预声明依赖它。
         budget_tokens: 票级 token 预算（AGT budgets.rego 借鉴）——累计用量
         超限即终止票 + 落 ruling reason=budget_tokens_exceeded（成本从
-        "事后度量"升级为"事中硬闸"）。"""
+        "事后度量"升级为"事中硬闸"）。
+
+        fail-closed（§8-2/S4 收口）：设了预算但 executor 无 metrics 台账时
+        直接拒收（budget_requires_metrics），不建票、不写 receipt——
+        "没有计量就没有硬闸"不能演变成"没有计量就静默旁路"。"""
+        if budget_tokens is not None and \
+                getattr(self.executor, "metrics", None) is None:
+            raise ValueError("budget_requires_metrics: 票级预算要求 executor "
+                             "有 metrics 台账；无计量即无硬闸，fail-closed 拒收")
         # 幂等：同 id 消息只处理一次（先存后做）
         if not self.store.record_receipt(f"input:{inp.id}", inp.text):
             return {"disposition": "duplicate", "input_id": inp.id}
@@ -303,7 +317,30 @@ class Engine:
         # confidence 来自证据源合成（I5）：缺 estimator 时保守用历史硬编码值。
         if self.proactivity is not None:
             from .proactivity import CandidateEvent  # 延迟 import，容忍缺模块
-            evidence = {"watchdog_pass": 1.0 if verdict_label == "ok" else 0.0}
+            # P1-A：默认逐字保持单键口径（tests/test_integration.py:52 精确
+            # 断言）；注入 completion_evidence 构造器时改走多维证据，并把
+            # 证据向量随 observe_log 落盘，供标注与逐字复算。
+            if self.completion_evidence is None:
+                evidence = {"watchdog_pass": 1.0 if verdict_label == "ok" else 0.0}
+            else:
+                repaired = self.store.get(f"repairs:{assignment.ticket_id}") or {}
+                first_input = ticket.inputs[0] if ticket.inputs else None
+                # 真实工具轮数：该票在 executor 台账里的调用条数（无台账=0）。
+                # 报告自带 tool_rounds 时由构造器优先采用报告值。
+                metrics = getattr(self.executor, "metrics", None)
+                tool_calls = sum(
+                    1 for r in getattr(metrics, "records", [])
+                    if getattr(r, "ticket_id", None) == assignment.ticket_id)
+                ctx = {
+                    "verdict_label": verdict_label,
+                    "report_payload": report_payload,
+                    "ticket": ticket, "assignment": assignment,
+                    "text": (first_input.text if first_input else
+                             ticket.mandate.task_text),
+                    "repairs": int(repaired.get("count", 0) or 0),
+                    "tool_calls": tool_calls,
+                }
+                evidence = dict(self.completion_evidence(ctx))
             if self.confidence_estimator is not None:
                 conf = self.confidence_estimator.estimate(evidence)
             else:
@@ -315,11 +352,26 @@ class Engine:
             if dec.action.startswith("observe_"):
                 # observe 模式的标注旁路：原始事件三数 + 判定依据一起留，
                 # 可直接喂 calibration.LabelStore.append（I5 闭环）。
-                self.observe_log.append({
+                rec = {
                     "event_id": ev.event_id, "utility": ev.utility,
                     "confidence": ev.confidence, "created_at": ev.created_at,
                     "p_star": dec.p_star, "u_effective": dec.u_effective,
-                    "action": dec.action, "watchdog_verdict": verdict_label})
+                    "action": dec.action, "watchdog_verdict": verdict_label}
+                if self.completion_evidence is not None:
+                    rec["evidence"] = evidence
+                self.observe_log.append(rec)
+            else:
+                # 校准达标解除 observe 后：动作就是真的 speak/wait/drop。
+                # 主动开口必须留痕（notices 给 Router 进度地图 + store kv
+                # 可恢复），否则"解除 observe"等于把判定丢进黑洞。
+                self.notices.append({
+                    "kind": "proactive_speak", "event_id": ev.event_id,
+                    "ticket_id": assignment.ticket_id,
+                    "action": dec.action, "confidence": ev.confidence,
+                    "p_star": dec.p_star})
+                self.store.put(f"proactive:{ev.event_id}", {
+                    "action": dec.action, "ticket_id": assignment.ticket_id,
+                    "confidence": ev.confidence, "at": ev.created_at})
 
         # 回复走 outbox 三角：receipt 已在 intake 记过，这里补回复的 receipt
         rid = f"reply:{assignment.ticket_id}:{uuid.uuid4().hex[:6]}"

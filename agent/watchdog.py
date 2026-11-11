@@ -236,6 +236,11 @@ def _covered(path: str, patterns) -> bool:
 
 class Watchdog:
     def __init__(self, judge: Optional["Judge"] = None, rules_check: bool = True):
+        # §8-3 收口：judge 与规则层同时关掉会让任意 payload 拿到 OK，
+        # 这是构造级 fail-open；宁可构造失败也不给"无条件放行"的判官。
+        if judge is None and not rules_check:
+            raise ValueError("no_checks: Watchdog 至少需要规则层或一个 judge，"
+                             "否则任何报告都会被判 OK（构造级 fail-open）")
         self.judge = judge
         self.rules_check = rules_check
 

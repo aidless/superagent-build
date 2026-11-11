@@ -1,0 +1,17 @@
+{"frame": 1, "source": "results/real/sweep_b/runs.jsonl:1", "text": "[sweep_b] t-l1-single-0  arm=single seed=0 calls=2 intv=2 wall=5.44s", "anchor": "t-l1-single-0", "color": "58a6ff", "visible_lines": 1}
+{"frame": 2, "source": "results/real/sweep_b/runs.jsonl:2", "text": "[sweep_b] t-l1-dual-0  arm=dual seed=0 calls=2 intv=1 wall=3.40s", "anchor": "t-l1-dual-0", "color": "3fb950", "visible_lines": 2}
+{"frame": 3, "source": "results/real/sweep_b/runs.jsonl:17", "text": "[sweep_b] t-l3-single-0  arm=single seed=0 calls=2 intv=2 wall=16.08s", "anchor": "t-l3-single-0", "color": "58a6ff", "visible_lines": 3}
+{"frame": 4, "source": "results/real/sweep_b/runs.jsonl:6", "text": "[sweep_b] t-l1-dual-2  arm=dual seed=2 calls=2 intv=1 wall=2.87s", "anchor": "t-l1-dual-2", "color": "3fb950", "visible_lines": 4}
+{"frame": 5, "source": "results/real/sweep_b/runs.jsonl:11", "text": "[sweep_b] t-l2-single-1  arm=single seed=1 calls=2 intv=2 wall=5.89s", "anchor": "t-l2-single-1", "color": "58a6ff", "visible_lines": 5}
+{"frame": 6, "source": "results/real/sweep_b/runs.jsonl:32", "text": "[sweep_b] t-l4-dual-3  arm=dual seed=3 calls=2 intv=1 wall=7.79s", "anchor": "t-l4-dual-3", "color": "3fb950", "visible_lines": 6}
+{"frame": 7, "source": "results/eval/assessor_ab/armA.jsonl:1", "text": "[assessor] evuser:e1 explicit should=T disp=accept accepted=T ticket=k1 verdict=ok", "anchor": "evuser:e1", "color": "3fb950", "visible_lines": 7}
+{"frame": 8, "source": "results/eval/assessor_ab/armA.jsonl:8", "text": "[assessor] evuser:m2 mention should=T disp=rejected_eval accepted=F", "anchor": "evuser:m2", "color": "f85149", "visible_lines": 8}
+{"frame": 9, "source": "results/eval/assessor_ab/armA.jsonl:22", "text": "[assessor] evuser:b1 mention should=F disp=rejected_eval accepted=F", "anchor": "evuser:b1", "color": "f85149", "visible_lines": 9}
+{"frame": 10, "source": "results/eval/assessor_ab/armA.jsonl:21", "text": "[assessor] evuser:m15 mention should=T disp=accept accepted=T ticket=k12 verdict=ok", "anchor": "evuser:m15", "color": "3fb950", "visible_lines": 10}
+{"frame": 11, "source": "results/eval/assessor_ab/armA.jsonl:6", "text": "[assessor] evuser:e6 explicit should=T disp=accept accepted=T ticket=k6 verdict=ok", "anchor": "evuser:e6", "color": "3fb950", "visible_lines": 11}
+{"frame": 12, "source": "results/eval/assessor_ab/armA.jsonl:7", "text": "[assessor] evuser:m1 mention should=T disp=accept accepted=T ticket=k7 verdict=ok", "anchor": "evuser:m1", "color": "3fb950", "visible_lines": 12}
+{"frame": 13, "source": "service/observe_log.jsonl:1", "text": "[observe] done:k1  action=observe_speak  watchdog=ok  conf=0.533", "anchor": "done:k1", "color": "3fb950", "visible_lines": 13}
+{"frame": 14, "source": "service/observe_log.jsonl:7", "text": "[observe] input:svc-2026-11-10-t4  action=observe_drop  watchdog=unassessable  conf=0.480", "anchor": "input:svc-2026-11-10-t4", "color": "f85149", "visible_lines": 14}
+{"frame": 15, "source": "service/observe_log.jsonl:14", "text": "[observe] done:k1  action=observe_speak  watchdog=unassessable  conf=0.507", "anchor": "done:k1", "color": "d29922", "visible_lines": 15}
+{"frame": 16, "source": "service/observe_log.jsonl:55", "text": "[observe] input:svc-p1b2r-t6  action=observe_drop  watchdog=unassessable  conf=0.510", "anchor": "input:svc-p1b2r-t6", "color": "f85149", "visible_lines": 16}
+{"frame": 17, "source": "service/observe_log.jsonl:53", "text": "[observe] done:k4  action=observe_speak  watchdog=ok  conf=0.627", "anchor": "done:k4", "color": "3fb950", "visible_lines": 17}

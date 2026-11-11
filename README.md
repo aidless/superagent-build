@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/superagent-build)](https://pypi.org/project/superagent-build/)
 [![Python](https://img.shields.io/pypi/pyversions/superagent-build)](https://pypi.org/project/superagent-build/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![CI](https://github.com/aidless/superagent-build/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-30%20files%20153%20pytest%20%2B%209%20script%20suites-brightgreen)
+![CI](https://github.com/aidless/superagent-build/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-33%20files%20177%20pytest%20%2B%209%20script%20suites-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-80%25-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-success)
 
 **这是什么**：一个把治理当第一公民的多 agent 内核——每条输入先过两级准入，
@@ -156,10 +156,10 @@ ground truth 标签的任务集（6 explicit 合规 + 15 mention 合规 + 9 ment
       T2 报告诚实标注"已提交、结果未确认"与盘上事实吻合；
       文本工具协议兼容（<tool_call> JSON 与 DSML invoke 双格式解析）。
 
-## v0.3.2（main HEAD，未发版）：方向性证据 → 结论，治理契约 → 机器可读规范
+## v0.3.2：方向性证据 → 结论，治理契约 → 机器可读规范，校准闭环回写
 
-> 版本口径：PyPI 当前发布快照是 **0.3.1**；本节工作已在 `main`，**尚未发版**
-> （下次发版统一推 0.3.2）。发布稿见 `docs/RELEASE_CN.md` / `docs/RELEASE_EN.md`。
+> 版本口径：本节工作即 **0.3.2**（PyPI `superagent-build==0.3.2`）。发布稿见
+> `docs/RELEASE_CN.md` / `docs/RELEASE_EN.md`。
 
 ### 32-run 真跑推翻了 8-run 的符号结论
 
@@ -188,8 +188,16 @@ ground truth 标签的任务集（6 explicit 合规 + 15 mention 合规 + 9 ment
 
 - `docs/spec/GOVERNANCE.md`：RFC2119 关键词 + 8 个干预点覆盖表（**5 处诚实标留白**）+
   判决闭合集 `ALLOW/BLOCK/ESCALATE`（ESCALATE 是 ruling 流第三态 + 一次性 lift 绑
-  `content_hash`）+ **M1..M22 每条 MUST 配一个 conformance 测试**
-  （`tests/test_conformance.py`，23 条测试，每条内部 RED→GREEN）+ S1..S8 SHOULD 偏差表。
+  `content_hash`）+ **M1..M29 每条 MUST 配一个 conformance 测试**
+  （`tests/test_conformance.py` 23 条 + `tests/test_v033_section8.py` 7 条 = 30 条，
+  每条内部 RED→GREEN）+ S1..S8 SHOULD 偏差表。
+- **§8 差异七处实修**（M23..M29，全部带行号锚点写进规范）：无 metrics 时预算闸
+  `fail-closed 拒收`（`engine.py:95`）· escalate lift 经内容哈希在写路径真被消费
+  （`executing_executor.py:187` `_gate_allows` 三参分流）· `Watchdog` 无判据构造直接
+  `ValueError`（`watchdog.py:242`）· outbox 非通道异常改为退避重试不留死信
+  （`outbox.py:46`）· `Scheduler` idle 回收落 `IDLE_TIMEOUT` 判决（`scheduler.py:121`）·
+  `accept_on_broadcast` 校验分支可达（`admission.py:84`）· `scopes.json` 旧态快照 + 原子
+  替换（`governance.py:105`）。
 - `docs/adr/ADR-0001-fail-closed.md`：fail-closed 不许做成配置开关。落地时收口了一条
   真偏差——`pre_write()` 在治理挂点缺位时曾 `return True`，现为 BLOCK + 判决留痕
   （M22 守住）。
@@ -214,6 +222,37 @@ ground truth 标签的任务集（6 explicit 合规 + 15 mention 合规 + 9 ment
   在真数据上的体现（`results/real/d4_calibration/calibration.json`）。
   诚实口径：13 条事件、启发式标注 + 1 条人工覆写（"紧急求助被静默"记 wait_bad），
   是方向性验证，不是双人独立标注的充分统计。
+
+### 校准闭环：从"只出报告"到"真回写服役"
+
+v0.3.2 之前 `close_loop()` 只输出 `applied_params`，参数从不回写到运行中的
+`ProactivityConfig`——报告是一回事，服役是另一回事。这一版把链路接通：
+
+- `calibration_loop.close_loop(..., cfg=..., apply=True)`：达标才调
+  `apply_calibration()` 写回 `c_false/c_speak/lam` 并**解除 `observe`**；不达标返回
+  `applied=False` 且参数逐字不变（`test_p1a_calibration_apply.py` 8 条）。
+- `calibration_loop.load_calibrated_cfg(report)`：从**已落盘**的校准报告建配置；
+  报告里 `calibrated` 不为真或三键不全 → 回落默认 `observe=True`（fail-closed）。
+- 完成侧多维证据：`Engine(completion_evidence=build_completion_evidence)` 注入后，
+  开口置信度由 watchdog 判决 / 显式标记 / bot 标记 / 文本长度分档 / 工具调用轮数 /
+  修复次数六维合成；**不注入时逐字保持旧单键口径**（`test_integration.py:52` 仍精确
+  断言 `estimate({"watchdog_pass": 1.0})`）。
+- 解除 `observe` 后的开口不再只写日志：落 `notices(effect=proactive_speak)` + store kv
+  `proactive:{event_id}`，可被上层消费。
+
+三臂真跑（Magpie `workbuddy/deepseek-v4.1-flash`，usage 逐调用真实，汇总落
+`results/real/p1b/summary.json`）：
+
+| 臂 | 配置 | calls | tokens | observe 事件 | 开口 | 置信度档位 |
+|---|---|---|---|---|---|---|
+| 1 同构 10 任务 | observe + 多维证据 | 7 | 3700 | 10 | 0 | 0.48 / 0.51 / 0.6133 / 0.6267 |
+| 2 异构 6 任务 | observe + 多维证据 | 6 | 5896 | 6 | 0 | 同上（完成侧两档） |
+| 3 同异构 6 任务 | 校准回写 → observe=False | 6 | 4225 | **0** | **4** | 0.6133 ×2 / 0.6267 ×2 |
+
+口径声明：臂 3 的 4 条开口无人复核，本批证明的是**链路跑通**（回写→解除→开口留痕），
+不是开口精度；`p*=(c_false+c_speak)/(10+c_false)=0.208333`（沿用 d4 的 13 条单键
+事件参数），换多维证据后应重跑校准再放行。同构批也出现两档，是因为工具调用轮数不同；
+档位区分度真实但窄。
 
 ### 分发与面试转化
 

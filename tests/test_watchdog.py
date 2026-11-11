@@ -94,11 +94,22 @@ def main() -> int:
     check("RED6b 规则层与 judge 理由合并", any("lib/x.py" in x for x in r.reasons)
           and any("judge 层补充理由" in x for x in r.reasons))
 
-    # rules_check=False：跳过确定性规则层，只看 judge（无 judge → OK 放行）
-    r = Watchdog(judge=None, rules_check=False).review(
-        mandate, {"touched_paths": ["lib/x.py"], "status": "done"})
-    check("GREEN4 rules_check=False 跳过规则层", r.verdict is WatchdogVerdict.OK
-          and r.rule_findings == [])
+    # 语义变更（v0.3.3 §8-3 收口，详见 docs/spec/GOVERNANCE.md）：
+    # 旧 GREEN4 断言「judge=None + rules_check=False → 任意 payload 判 OK」，
+    # 这正是构造级 fail-open。契约升级后该构造 MUST 被拒；跳过规则层的
+    # 合法用法是「带 judge + rules_check=False」，下面两条分别验红/验绿。
+    rejected = False
+    try:
+        Watchdog(judge=None, rules_check=False)
+    except ValueError as e:
+        rejected = "no_checks" in str(e)
+    check("RED8 无判据构造被拒（fail-closed）", rejected)
+    r = Watchdog(judge=ScriptedJudge({"fine": (WatchdogVerdict.OK, [])}),
+                 rules_check=False).review(
+        mandate, {"touched_paths": ["lib/x.py"], "status": "done",
+                  "scenario": "fine"})
+    check("GREEN4 带 judge 时 rules_check=False 跳过规则层",
+          r.verdict is WatchdogVerdict.OK and r.rule_findings == [])
 
     # 前缀树精确性：docs 只匹配 docs 树，不误伤 docs2
     r = wd.review(mandate, {"touched_paths": ["docs2/x.py"], "status": "done", "summary": "ok"})

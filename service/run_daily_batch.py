@@ -28,27 +28,43 @@ from agent.executing_executor import ExecutingToolLoopExecutor
 from agent.metrics import MetricsLedger
 
 ENDPOINT = "http://127.0.0.1:3425/v1/chat/completions"
-MODEL = "deepseek-v4.1-flash"
+MODEL = "workbuddy/deepseek-v4.1-flash"  # opencode-go 配额耗尽(429)，改显式 provider
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", required=True)
     ap.add_argument("--tasks", required=True)
+    ap.add_argument("--model", default=MODEL,
+                    help="网关模型 id（裸名走 routing group，可能落到配额耗尽 provider）")
+    ap.add_argument("--completion-evidence", action="store_true",
+                    help="完成侧注入多维证据构造器（P1-A：修 0.533 同质化）")
+    ap.add_argument("--apply-calibration", default=None,
+                    help="落盘 close_loop 报告路径；达标则回写参数并解除 observe")
     args = ap.parse_args()
 
     tasks = json.load(open(args.tasks, encoding="utf-8"))
     whitelist = [t["thread"] for t in tasks]
+    from agent.calibration import build_completion_evidence
+    from agent.calibration_loop import load_calibrated_cfg
+    pcfg = ProactivityConfig(observe=True)
+    if args.apply_calibration:
+        report = json.load(open(args.apply_calibration, encoding="utf-8"))
+        pcfg = load_calibrated_cfg(report)
+        print(f"[calibration] observe={pcfg.observe} c_false={pcfg.c_false} "
+              f"c_speak={pcfg.c_speak} lam={pcfg.lam}", flush=True)
+    ce = build_completion_evidence if args.completion_evidence else None
     ledger = MetricsLedger()
-    executor = ExecutingToolLoopExecutor(endpoint=ENDPOINT, model=MODEL,
+    executor = ExecutingToolLoopExecutor(endpoint=ENDPOINT, model=args.model,
                                          metrics=ledger, timeout=60.0,
                                          max_tool_rounds=3)
     eng = Engine(store=Store(f"results/real/service-{args.date}.db"),
                  cfg=AdmissionConfig(whitelist=whitelist),
                  executor=executor, deliver=lambda ch, body: True,
                  watchdog=Watchdog(), governance=ScopeRegistry(),
-                 proactivity=ProactivityEngine(ProactivityConfig(observe=True)),
-                 confidence_estimator=ConfidenceEstimator(), max_repairs=1)
+                 proactivity=ProactivityEngine(pcfg),
+                 confidence_estimator=ConfidenceEstimator(), max_repairs=1,
+                 completion_evidence=ce)
     executor.write_gate = eng.pre_write
 
     def worker_final_text(sid):
@@ -91,14 +107,30 @@ def main():
         print(f"  verdict: {verdict}", flush=True)
 
     # observe 追加（K2 数据流）
+    # 本臂独立留证（共享 observe_log 跨臂追加无法回切，报告要可复算）
+    with open(f"results/real/observe_{args.date}.jsonl", "w",
+              encoding="utf-8") as f:
+        for ev in eng.observe_log[n_events_before:]:
+            f.write(json.dumps(ev, ensure_ascii=False) + "\n")
     with open("service/observe_log.jsonl", "a", encoding="utf-8") as f:
         for ev in eng.observe_log[n_events_before:]:
             f.write(json.dumps(ev, ensure_ascii=False) + "\n")
+    # P1-A：解除 observe 后主动开口走 notices + store kv，落盘留证
+    speaks = [n for n in eng.notices if n.get("kind") == "proactive_speak"]
+    if speaks:
+        os.makedirs("results/real", exist_ok=True)
+        with open(f"results/real/proactive_{args.date}.jsonl", "a",
+                  encoding="utf-8") as f:
+            for n in speaks:
+                f.write(json.dumps(n, ensure_ascii=False) + "\n")
     ledger.to_jsonl(f"service/metrics_{args.date}.jsonl")
     tok = sum(r.prompt_tokens + r.completion_tokens for r in ledger.records)
     print(f"=== 批完成 {time.time() - t0:.0f}s calls={len(ledger.records)} "
-          f"tokens={tok} observe_events={len(eng.observe_log) - n_events_before}",
-          flush=True)
+          f"tokens={tok} observe_events={len(eng.observe_log) - n_events_before} "
+          f"proactive_speaks={len(speaks)}", flush=True)
+    confs = sorted({round(ev["confidence"], 4)
+                    for ev in eng.observe_log[n_events_before:]})
+    print(f"=== confidence 档位: {confs}", flush=True)
 
 
 if __name__ == "__main__":

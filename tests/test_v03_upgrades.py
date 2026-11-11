@@ -11,8 +11,8 @@
    speak_bad>0 时强制 calibrated=False + note 含 "ineligible"。
 5. reason 词表（AO autoreview）：agent.engine.REASONS 常量；engine 产的
    ruling 一律带 reason∈词表。
-6. symlink 加固（AF）：governance.check realpath 归一（work/../secret →
-   BLOCK）；_default_host_exec O_NOFOLLOW 拒 symlink 叶子。
+6. symlink 加固（AF）：governance._matches 用 posixpath.normpath 做 lexical
+   归一（work/../secret → BLOCK）；_default_host_exec O_NOFOLLOW 拒 symlink 叶子。
 
 全部纯 stdlib / 无网络 / 无 sleep。
 """

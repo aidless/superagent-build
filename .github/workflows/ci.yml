@@ -33,3 +33,7 @@ jobs:
         run: |
           python3 service/make_evidence_bundle.py --verify
           echo "evidence bundle sha256 manifest OK"
+      - name: interview drill selftest
+        run: |
+          python3 service/interview_drill.py --selftest
+          echo "interview drill selftest OK"

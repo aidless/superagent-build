@@ -182,7 +182,7 @@ agent (`agent/engine.py:339-346`); M22 now asserts it as a MUST.
   (`agent/outbox.py:50`). `abandon()` accepts only `("channelGone", "channelIgnored")`
   (`agent/store.py:107-108`).
 
-## 6. MUST clauses (M1..M22) — each row names its conformance test on the same line
+## 6. MUST clauses (M1..M29) — each row names its conformance test on the same line
 
 | ID | Normative MUST / MUST NOT clause | Code anchor | Conformance test |
 |---|---|---|---|
@@ -208,6 +208,13 @@ agent (`agent/engine.py:339-346`); M22 now asserts it as a MUST.
 | M20 | `intake` MUST 先 `record_receipt(f"input:{inp.id}", inp.text)` 再做任何副作用；同 `id` 重投 MUST 返回 `{"disposition": "duplicate", "input_id": inp.id}` 且 MUST NOT 新建第二张 ticket；新 `id` MUST `accept` | `agent/engine.py:82-91`, `agent/store.py:58-67` | `tests/test_conformance.py::test_m20_intake_receipt_idempotent` |
 | M21 | D2 复审熔断：`verdict_label == "ok"` MUST 把 `review_fail:{tid}` 清零；连续非 OK 到 `streak > self.max_review_failures` MUST 落 `reason: "failed_same_sha_retry_limit"` + `consecutive_failures: streak` + `tickets.end` + `"escalated": True`、MUST NOT 进修复环回复 | `agent/engine.py:41`, `agent/engine.py:232-250` | `tests/test_conformance.py::test_m21_consecutive_review_failure_fuse` |
 | M22 | 治理挂点缺位（`self.governance is None`）时 `pre_write` MUST 返回 `False` 并落 `verdict: "BLOCK"` / `reason: "governance_path_block"` / `detail` 含 `governance_absent` 的判决；MUST NOT 静默放行；接入 `ScopeRegistry` 且已 `claim` 的路径 MUST 放行（ADR-0001 fail-closed） | `agent/engine.py:339-346` | `tests/test_conformance.py::test_m22_pre_write_without_governance_is_fail_closed` |
+| M23 | 设 `budget_tokens` 而 executor 无 `metrics` 时 `intake` MUST `raise ValueError("budget_requires_metrics: ...")`，且 MUST NOT 写 receipt / 建票；带 `metrics` MUST `accept`（S4） | `agent/engine.py:82-97` | `tests/test_v033_section8.py::test_s4_budget_without_metrics_fails_closed` |
+| M24 | J2 写路径 MUST 把 `sha256(content)` 传进 `write_gate`（按签名探测两参/三参协议，老两参 gate 零改动兼容）；escalate lift MUST 能经 `Engine.pre_write` 消费一次且写 `escalation_lifted`，第二次同参 MUST `BLOCK`（S6） | `agent/executing_executor.py:31-55`, `agent/executing_executor.py:162-199` | `tests/test_v033_section8.py::test_s6_escalate_lift_reachable_via_write_path` |
+| M25 | `Watchdog(judge=None, rules_check=False)` MUST `raise ValueError("no_checks: ...")`；`Watchdog()` 与带 judge 的 `rules_check=False` MUST 正常复核（构造级 fail-open 收口） | `agent/watchdog.py:237-246` | `tests/test_v033_section8.py::test_watchdog_no_checks_constructor_rejected` |
+| M26 | `pump` 遇 `ChannelGone`/`ChannelIgnored` 之外异常 MUST `mark_retry(now + backoff_next(attempts))` + `retried += 1`，MUST NOT 外泄；下一轮 MUST 可送达（S5） | `agent/outbox.py:36-56` | `tests/test_v033_section8.py::test_s5_outbox_other_exception_retries` |
+| M27 | `Scheduler` idle 回收 MUST 经 `engine._ruling` 落 `reason: "idle_timeout"`；未超时票 MUST NOT 产生该判决（S8） | `agent/scheduler.py:113-123` | `tests/test_v033_section8.py::test_s8_idle_timeout_emits_ruling` |
+| M28 | `decide()` 的 broadcast + `accepted=True` MUST 返回 `rejected_eval:accept_on_broadcast`（该分支必须可达，不能被 `hallucinated_rule` 抢先）；deny / 幻觉名 / 空证据 MUST 保持 fail-closed | `agent/admission.py:72-92` | `tests/test_v033_section8.py::test_accept_on_broadcast_branch_reachable_via_decide` |
+| M29 | `scopes.json` 写前 MUST 把上一版完整快照复制为 `scopes.json.bak`，且 MUST 用同目录临时文件 + `os.replace` 原子替换、`flock` 独立锁文件；`rulings.jsonl` 仍 MUST 是唯一 append-only 流（§8-6） | `agent/governance.py:86-113` | `tests/test_v033_section8.py::test_scopes_state_keeps_previous_snapshot` |
 
 ## 7. SHOULD clauses (recommendations; deviations are listed in §8)
 
@@ -216,64 +223,56 @@ agent (`agent/engine.py:339-346`); M22 now asserts it as a MUST.
 | S1 | 每条 ruling SHOULD 带 `at` 时间戳 | 已满足：`record.setdefault("at", ...)` `agent/governance.py:188`；`rec.setdefault("at", time.time())` `agent/engine.py:70` |
 | S2 | 干预点 1/3/4/6/8 SHOULD 在未来版本补齐挂点 | 未实现，见 §1 |
 | S3 | ~~`Engine.pre_write` 在 `self.governance is None` 时 SHOULD 拒绝而非返回 `True`~~ | **已收口**：现为 BLOCK + 判决留痕 `agent/engine.py:339-347`，由 M22 守住 |
-| S4 | executor 无 `metrics` 时预算闸 SHOULD 拒绝派工而非旁路 | 现为 `return 0` `agent/engine.py:213-214` |
-| S5 | `outbox.pump` SHOULD 捕获其它异常并退避重试 | 现只捕获 `ChannelGone` / `ChannelIgnored` `agent/outbox.py:38-45` |
-| S6 | escalate lift SHOULD 可从 J2 写路径消费 | 现 `WriteGate = Callable[[str, str], bool]` 不传 `content_hash` `agent/executing_executor.py:26` |
+| S4 | ~~executor 无 `metrics` 时预算闸 SHOULD 拒绝派工而非旁路~~ | **已收口**：`intake` 直接 `raise ValueError("budget_requires_metrics: ...")` `agent/engine.py:89-96`，M23 守住 |
+| S5 | ~~`outbox.pump` SHOULD 捕获其它异常并退避重试~~ | **已收口**：`except Exception` → `mark_retry` `agent/outbox.py:46-52`，M26 守住 |
+| S6 | ~~escalate lift SHOULD 可从 J2 写路径消费~~ | **已收口**：`WriteGate = Callable[..., bool]` + 签名探测 + `sha256(content)` `agent/executing_executor.py:31-55`，M24 守住 |
 | S7 | ~~`docs/adr/ADR-0001` SHOULD 落盘~~ | **已收口**：`docs/adr/ADR-0001-fail-closed.md` |
-| S8 | `idle_timeout` SHOULD 产生一条 `_ruling` | 现只写 `a.report = "idle_timeout"` `agent/scheduler.py:114`；`REASONS` 中该词未被 ruling 使用 |
+| S8 | ~~`idle_timeout` SHOULD 产生一条 `_ruling`~~ | **已收口**：`engine._ruling({... "reason": "idle_timeout"})` `agent/scheduler.py:113-123`，M27 守住 |
 
-## 8. Spec-vs-implementation discrepancies (reported, implementation untouched)
+## 8. Spec-vs-implementation discrepancies (v0.3.2 发版内全量收口)
 
-1. **RESOLVED**: `pre_write()` 在 `self.governance is None` 时曾返回 `True`（Engine 级
-   fail-open 接线，违背 ADR-0001）。现为 BLOCK + `reason: "governance_path_block"` +
-   `detail` 含 `governance_absent`（`agent/engine.py:339-347`），判据落 M22。M5 仍只描述
-   "挂点已接线"的 BLOCK 语义，两者互补。
-2. `agent/engine.py:213-214`: `_tokens_used()` returns `0` when executor has no
-   `metrics` ("预算闸自动旁路——没有计量就没有硬闸"). M11 is therefore stated with
-   the explicit precondition "且 executor 有 `metrics`"; S4 records the gap.
-3. `agent/watchdog.py:288-302`: `Watchdog(judge=None, rules_check=False)` returns
-   `OK` for any payload — a constructor-level fail-open configuration. M14 is stated
-   for the shipped review path (`rules_check=True` by default); ADR-0001 §4 lists this
-   as a known fail-open-capable wiring.
-4. `agent/admission.py:72-85`: docstring says `matched_rule 恰好一条`; code only checks
-   `a.matched_rule not in g.matched_rules`. The
-   `return False, "accept_on_broadcast"` branch (`agent/admission.py:84-85`) is
-   unreachable through `decide()` because `gate()` returns `GateResult("broadcast", [])`
-   (`agent/admission.py:61`) and the membership check fires first. M13 asserts the
-   real behaviour, not the docstring.
-5. `agent/outbox.py:30-32` docstring says "抛其他异常或返回 False → 退避重试";
-   `pump()` only catches `ChannelGone` / `ChannelIgnored` (`agent/outbox.py:38-45`),
-   so other exceptions propagate out of `pump()` (`agent/outbox.py:37`). M10 covers
-   `False` and the two legal abandons; S5 records the gap.
-6. `agent/governance.py:84-91`: `_save_scopes()` uses `open(self._scopes_path(), "w", ...)`
-   (truncating rewrite under flock), so `scopes.json` is **not** append-only; only
-   `rulings.jsonl` is (`agent/governance.py:190-198`). M7 is deliberately scoped to
-   the ruling stream.
-7. `agent/executing_executor.py:26` + `agent/engine.py:335-341`: `write_gate` is a
-   2-argument callable `(ticket_id, path)`, so the write path never passes
-   `content_hash`; escalation lifts registered by `request_escalation` cannot be
-   consumed through the J2 executor. M6 is tested at the `ScopeRegistry` API level;
-   S6 records the reachability gap.
-8. `agent/scheduler.py:114`: `idle_timeout` is written as `a.report` only; no
-   `_ruling` with `reason: "idle_timeout"` is emitted, although the literal exists
-   in `REASONS` (`agent/engine.py:28`). Vocabulary completeness ≠ usage.
-9. `tests/test_v03_upgrades.py:14-15` claims "`governance.check` realpath 归一";
-   the implementation is `posixpath.normpath(path)` (`agent/governance.py:47`), i.e.
-   lexical normalisation plus kernel-level `O_NOFOLLOW`, not `realpath`. M3 states
-   the real two-layer mechanism.
-10. `agent/governance.py:36` documents `CheckResult.verdict` as only
-    `"ALLOW" | "BLOCK"`. `ESCALATE` is not a third return value of `check()`; it is
-    carried by ruling verdicts `"ESCALATION_REQUESTED"` / `"ESCALATE_LIFTED"`
-    (`agent/governance.py:134`, `agent/governance.py:158`). §2 states this honestly.
-11. 并发改动记录（撰写期间现场在变，本规范每次都按合并后的现场重锚）：
-    `agent/engine.py` 由 349 行扩到 **365** 行——`REASONS` 从 7 词变 **8** 词（新增
-    `"failed_same_sha_retry_limit"` `agent/engine.py:30`），`on_worker_report` 在修复环
-    之前插入 D2 连续失败熔断（`agent/engine.py:232-250`）；随后 `pre_write` 的
-    `governance is None` 分支由 `return True` 收口为 BLOCK + 判决留痕
-    （`agent/engine.py:339-346`），新增 M22 覆盖该收口；`agent/calibration.py` 的
-    `LabelStore` 由 `agent/calibration.py:89` 移到 `agent/calibration.py:198-262`。
-    本规范与 `tests/test_conformance.py` 均已按改动后的现场行号重锚；实现文件的
-    改动由其它代理完成，本任务零改动实现文件。
+v0.3.2 的第一轮起草里，本节列了 11 条「只报告未改实现」的差异；
+同一次 v0.3.2 发版内按 §6 的 M23..M29 逐条实修（每条配 RED→GREEN 测试，`tests/test_v033_section8.py` 7 passed），
+原编号保留以便追溯：
+
+1. **RESOLVED (v0.3.2)**：`pre_write()` 在 `self.governance is None` 时曾返回 `True`
+   （Engine 级 fail-open 接线）。现为 BLOCK + `reason: "governance_path_block"` +
+   `detail` 含 `governance_absent`，M22 守住。
+2. **RESOLVED (S4/M23)**：`_tokens_used()` 曾对无 `metrics` 的 executor 返回 `0`
+   （"没有计量就没有硬闸"变静默旁路）。现 `intake(budget_tokens=...)` 在写 receipt
+   之前 `raise ValueError("budget_requires_metrics: ...")`；M11 的显式前置条件保留。
+3. **RESOLVED (M25)**：`Watchdog(judge=None, rules_check=False)` 曾对任意 payload
+   返回 `OK`。现构造即拒（`no_checks`）；`tests/test_watchdog.py` 的旧 GREEN4 断言
+   按契约升级改写为「无判据构造被拒 + 带 judge 时关规则层仍可用」。
+4. **RESOLVED (M28)**：`accept_on_broadcast` 分支曾被 `hallucinated_rule` 抢先而
+   不可达。现 broadcast 检查排在规则名校验之前；`matched_rule` 改为
+   「恰好命中 gate 输出一条」计数校验（补齐文档里说的"恰好一条"语义）。
+5. **RESOLVED (S5/M26)**：`outbox.pump` 曾只捕获两个合法放弃，其它异常外泄。
+   现 `except Exception` 走同一退避 `mark_retry`，docstring 与实现一致。
+6. **RESOLVED (M29)**：`scopes.json` 曾 `open(..., "w")` 截断重写且旧态无痕。
+   现独立锁文件 `flock` → 写前复制 `scopes.json.bak`（上一版完整快照）→
+   同目录临时文件 + `os.replace` 原子替换。`scopes.json` 是"当前态"快照，
+   **不是** append-only 事件流；append-only 仍只属于 `rulings.jsonl`（M7）。
+7. **RESOLVED (S6/M24)**：J2 写路径曾只传 `(ticket_id, path)`，escalate lift
+   无法消费。现按 `inspect.signature` 探测 gate 参数个数：三参 gate 收
+   `sha256(content)`，两参老 gate 零改动兼容；M6 的 `(path, content_hash)` 绑定
+   在真实写路径上生效。
+8. **RESOLVED (S8/M27)**：`idle_timeout` 曾只写 `a.report`。现 idle 回收经
+   `engine._ruling` 落 `reason: "idle_timeout"`，词表完备性升级为实际使用。
+9. **RESOLVED (文档)**：`tests/test_v03_upgrades.py:14-15` 曾写 "realpath 归一"。
+   现逐字改为 `posixpath.normpath` lexical 归一 + 内核层 `O_NOFOLLOW`（M3 的机制）。
+10. **RESOLVED (文档)**：`CheckResult.verdict` 注释只有 `"ALLOW" | "BLOCK"`。
+    现补注：ESCALATE 不是 check() 的第三个返回值，由 ruling 流的
+    `"ESCALATION_REQUESTED"` / `"ESCALATE_LIFTED"` 承载。
+11. **历史记录（非差异）**：v0.3.2 撰写期间 `agent/engine.py` 由并发代理从
+    349 行扩到 365 行（REASONS 七→八词、D2 熔断、pre_write 收口），
+    本规范与 `tests/test_conformance.py` 当时按合并后现场重锚行号。
+    本轮七处实修同样逐字重锚，见 §6 的 M23..M29 行。
+
+仍存活的**设计边界**（不是 fail-open，故未改）：8 个干预点里 5 个未挂
+（§1 诚实留白）；`accept_on_broadcast` 无配置开关可达（M28 只保证分支可判）；
+escalate lift 需人工先 `request_escalation` 登记；watchdog 的 LLM judge 需
+外部注入网关。这些是能力范围，不是契约违背。
 
 ## 9. Reproduction
 
@@ -282,7 +281,12 @@ python3 -m pytest tests/test_conformance.py -q
 python3 -m pytest tests/ -q
 ```
 
-Both commands run from `superagent-build/`. §6 maps MUST M1..M22 to its primary test
-function one-to-one; the file additionally carries
-`test_m21_review_fail_streak_fuses`（并发代理追加，作为 M21 的补充交叉验证，
-共 23 个测试函数 / 22 条 MUST）。所有测试用 `tmp_path`，测试之间不共享临时文件。
+Both commands run from `superagent-build/`. §6 maps MUST M1..M29 to its primary
+test function one-to-one: M1..M22 in `tests/test_conformance.py`（另有
+`test_m21_review_fail_streak_fuses` 作为 M21 的补充交叉验证，共 23 个测试函数），
+M23..M29 in `tests/test_v033_section8.py`（7 个测试函数）。所有测试用 `tmp_path`，
+测试之间不共享临时文件。
+
+```bash
+python3 -m pytest tests/test_v033_section8.py -q   # §8 收口的 RED→GREEN
+```
