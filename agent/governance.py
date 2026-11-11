@@ -23,6 +23,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import posixpath
 import shutil
 import tempfile
 import time
@@ -37,7 +38,13 @@ class CheckResult:
 
 
 def _matches(path: str, pattern: str) -> bool:
-    """对齐 gov.py：pattern 以 /** 结尾 = 前缀树匹配；否则精确/目录前缀匹配。"""
+    """对齐 gov.py：pattern 以 /** 结尾 = 前缀树匹配；否则精确/目录前缀匹配。
+
+    升级（AF 借鉴）：先对 path 做 lexical 归一（posixpath.normpath），
+    `work/../secret` 这类文本穿越在策略层就被拦；真 symlink 叶子由
+    host_exec 的 O_NOFOLLOW 在内核层收口（策略层+内核层双层防御）。
+    """
+    path = posixpath.normpath(path)
     if pattern.endswith("/**"):
         return path.startswith(pattern[:-2])
     return path == pattern or path.startswith(pattern.rstrip("/") + "/")
@@ -94,18 +101,62 @@ class ScopeRegistry:
         }
         self._save_scopes()
 
-    def check(self, ticket_id: str, path: str) -> CheckResult:
-        """写前校验：未声明即 BLOCK；声明了且路径命中即 ALLOW。"""
+    def check(self, ticket_id: str, path: str,
+              content_hash: str | None = None) -> CheckResult:
+        """写前校验：未声明即 BLOCK；声明了且路径命中即 ALLOW。
+
+        escalate 档（AGT 借鉴）：BLOCK 但存在未消费的一次性放行（lift）
+        且 (path, content_hash) 与审批登记精确匹配 → ALLOW 一次并消费。
+        content_hash=None 时不消费任何 lift（普通校验语义不变，fail-closed）。
+        """
         entry = self._scopes.get(ticket_id)
         if not entry or not entry.get("active"):
             return CheckResult(
                 "BLOCK", f"ticket {ticket_id} 无活动作用域声明——没有声明就不许写")
+        norm = posixpath.normpath(path)
         for pattern in entry["scopes"]:
             if _matches(path, pattern):
                 return CheckResult(
-                    "ALLOW", f"{path} ∈ {ticket_id} 声明的作用域 '{pattern}'")
+                    "ALLOW", f"{norm} ∈ {ticket_id} 声明的作用域 '{pattern}'")
+        # BLOCK：查一次性放行（escalate 档）
+        if content_hash is not None:
+            lifts = entry.get("lifts") or []
+            for i, lf in enumerate(lifts):
+                if lf.get("consumed"):
+                    continue
+                if lf.get("path") == norm and lf.get("content_hash") == content_hash:
+                    lifts[i]["consumed"] = True
+                    lifts[i]["consumed_at"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+                    self._save_scopes()
+                    self.ruling({"ticket_id": ticket_id, "path": norm,
+                                 "reason": "escalation_lifted",
+                                 "approver": lf.get("approver", ""),
+                                 "verdict": "ESCALATE_LIFTED"})
+                    return CheckResult(
+                        "ALLOW",
+                        f"{norm} 经人工放行（escalate，审批人 {lf.get('approver', '')}，"
+                        f"一次性，内容哈希已绑定）")
         return CheckResult(
-            "BLOCK", f"{path} 不在 {ticket_id} 声明的作用域 {entry['scopes']} 内")
+            "BLOCK", f"{norm} 不在 {ticket_id} 声明的作用域 {entry['scopes']} 内")
+
+    def request_escalation(self, ticket_id: str, path: str,
+                           content_hash: str, approver: str) -> dict:
+        """登记一次人工放行（escalate 档）：绑定 (path, content_hash)——
+        审批人同意的是这个内容哈希的这份文件（AGT enforced_identity 语义）。
+        check 带 same hash 消费一次后失效。不存在的 ticket 或非活动条目 → 拒。"""
+        entry = self._scopes.get(ticket_id)
+        if not entry or not entry.get("active"):
+            raise ValueError(f"ticket {ticket_id} 无活动作用域，无法登记放行")
+        norm = posixpath.normpath(path)
+        lift = {"path": norm, "content_hash": content_hash,
+                "approver": approver, "consumed": False,
+                "requested_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+        entry.setdefault("lifts", []).append(lift)
+        self._save_scopes()
+        self.ruling({"ticket_id": ticket_id, "path": norm,
+                     "reason": "escalation_requested", "approver": approver,
+                     "verdict": "ESCALATION_REQUESTED"})
+        return lift
 
     def release(self, ticket_id: str) -> None:
         """释放 ticket 的写作用域（保留记录供审计，active 置 False）。"""

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "superagent-build"
-version = "0.2.0"
+version = "0.3.0"
 description = "A measurable Super Agent kernel: two-stage admission, outbox delivery triangle, ticket persistence, write-scope governance, watchdog review, proactivity threshold, tick scheduler."
 readme = "README.md"
 requires-python = ">=3.10"

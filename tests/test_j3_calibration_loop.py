@@ -51,15 +51,16 @@ def test_heuristic_labels():
 def test_close_loop_calibrated():
     from agent.calibration_loop import close_loop
     with tempfile.TemporaryDirectory() as d:
-        # 好开口=高utility高置信；坏开口=低utility中置信（真实语义：证据链弱的
-        # 事件 utility 也低）；wait=低utility低置信。precision≥0.8 才达标。
+        # 好开口=高utility高置信；wait=低utility低置信。precision≥0.8 才达标。
+        # v0.3.0 信用门语义变更：夹具改为干净数据（无 speak_bad）——含坏开口
+        # 的批次现在判 INELIGIBLE（官方校准拒绝），坏开口路径由
+        # test_v03_upgrades.py::test_4_credit_gate_ineligible 覆盖。
         events = ([_ev(f"ok{i}", wd="OK", conf=0.9, utility=10.0)
                    for i in range(4)]
-                  + [_ev("bad0", wd="DEVIATION", conf=0.55, utility=2.0)]
                   + [_ev(f"w{i}", action="observe_wait", wd="OK",
                          utility=1.0, conf=0.3) for i in range(3)])
         out = close_loop(events, d, target_precision=0.8)
-        assert out["n_labeled"] == 8
+        assert out["n_labeled"] == 7
         assert out["calibration"]["calibrated"] is True
         assert "applied_params" in out
         assert set(out["applied_params"]) == {"c_false", "c_speak", "lam"}

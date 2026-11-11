@@ -32,10 +32,15 @@ class SchedulerConfig:
 
 class Scheduler:
     def __init__(self, engine, cfg: SchedulerConfig,
-                 clock: Optional[Callable[[], float]] = None):
+                 clock: Optional[Callable[[], float]] = None,
+                 pre_deliver_check: Optional[Callable[[str, str], bool]] = None):
+        """pre_deliver_check(ticket_id, session_id) -> bool（AO sessionguard
+        借鉴）：每次投递前重读票状态的租约检查，False=跳过该票（fail-closed，
+        宁可不派发也不投给状态已变的会话）。None=不做检查（旧行为）。"""
         self.engine = engine
         self.cfg = cfg
         self.clock = clock or time.time
+        self.pre_deliver_check = pre_deliver_check
 
     # ---------- 槽位占用口径 ----------
     def active_workers(self) -> int:
@@ -54,6 +59,7 @@ class Scheduler:
         dispatched = 0
         reclaimed = 0
         flushed = 0
+        skipped_lease = 0
 
         # a. 派发：约束按"本轮实际派发前"的槽位计，每派发一条 active 加一
         active = self.active_workers()
@@ -67,6 +73,11 @@ class Scheduler:
             if not t.assignments:
                 continue
             a = t.assignments[-1]
+            # 租约检查（AO sessionguard）：写前重读，检查不过=状态已变，跳过
+            if self.pre_deliver_check is not None and \
+                    not self.pre_deliver_check(tid, a.session_id):
+                skipped_lease += 1
+                continue
             for iid in list(t.undelivered):
                 if active >= self.cfg.max_workers:
                     break
@@ -94,6 +105,11 @@ class Scheduler:
                 continue
             if now - a.idle_at <= self.cfg.idle_timeout:
                 continue
+            # idle 回收也要过租约（回开 session 前重读状态）
+            if self.pre_deliver_check is not None and \
+                    not self.pre_deliver_check(tid, a.session_id):
+                skipped_lease += 1
+                continue
             # 记 idle 超时并落盘（Engine 唯一写者豁免：直接改对象 + _persist）
             a.report = "idle_timeout"
             self.engine.tickets._persist(t)
@@ -110,9 +126,10 @@ class Scheduler:
 
         # c. 出站
         stat = self.engine.flush_outbox(now) or {}
-        flushed += int(stat.get("delivered", stat.get("sent", 0)))
+        flushed = int(stat.get("delivered", stat.get("sent", 0)))
 
-        return {"dispatched": dispatched, "reclaimed": reclaimed, "flushed": flushed}
+        return {"dispatched": dispatched, "reclaimed": reclaimed,
+                "flushed": flushed, "skipped_lease": skipped_lease}
 
     # ---------- 便捷循环 ----------
     def run_until_idle(self, max_ticks: int = 100,

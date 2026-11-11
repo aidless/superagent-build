@@ -50,9 +50,20 @@ def run_calibration(store: LabelStore,
                     target_precision: float = 0.8,
                     min_speak: int = 3) -> dict:
     """标注 → 全网格择优搜索（K3 修复 C2：样本量门 + (precision, n_speak,
-    保守度) 择优）。返回 calibrate_best() 原样结果（含 calibrated 标志）。"""
-    return calibrate_best(store.load(), target_precision=target_precision,
-                          min_speak=min_speak)
+    保守度) 择优）。
+
+    信用门（APx 借鉴）：库里存在 speak_bad（watchdog 抓到过真实坏开口）
+    → 官方校准置 INELIGIBLE：calibrated 强制 False + note 说明，best_params
+    只作诊断值保留。precision≥target 解除 observe 的北极星线只认干净数据。
+    """
+    result = calibrate_best(store.load(), target_precision=target_precision,
+                            min_speak=min_speak)
+    if store.stats().get("ineligible"):
+        result = dict(result)
+        result["calibrated"] = False
+        result["note"] = ("ineligible_run: speak_bad present — credit gate "
+                          "(APx-style)，本批数据只做诊断，官方校准拒绝")
+    return result
 
 
 def apply_calibration(cfg: ProactivityConfig, result: dict) -> bool:

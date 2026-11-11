@@ -13,6 +13,7 @@ host_exec(op, path, content) -> bool：宿主执行钩子，测试注入替代�
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.request
 from typing import Callable, Optional
@@ -26,19 +27,32 @@ WriteGate = Callable[[str, str], bool]       # (ticket_id, path) -> bool
 
 
 def _default_host_exec(op: str, path: str, content: str) -> bool:
-    """真执行：write=覆盖写，append=追加。目录不存在则建。"""
+    """真执行：write=覆盖写，append=追加。目录不存在则建。
+
+    symlink 加固（AF 借鉴）：POSIX 下 open 带 O_NOFOLLOW——叶子在
+    "策略放行后、内核打开前"被换成 symlink 时内核拒绝（TOCTOU 收口到
+    内核层）。Windows 无 O_NOFOLLOW，退回普通 open（能力边界诚实声明：
+    本执行器是单租户协作设计，不是对抗敌对进程的沙箱）。
+    """
     import os
     d = os.path.dirname(path)
     if d:
         os.makedirs(d, exist_ok=True)
-    if op == "write":
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(content)
-        return True
+    flags = os.O_WRONLY | os.O_CREAT
     if op == "append":
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(content)
-        return True
+        flags |= os.O_APPEND
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    if op in ("write", "append"):
+        try:
+            fd = os.open(path, flags, 0o644)
+            try:
+                os.write(fd, content.encode("utf-8"))
+            finally:
+                os.close(fd)
+            return True
+        except OSError:
+            return False
     return False
 
 
@@ -166,6 +180,11 @@ class ExecutingToolLoopExecutor:
             self._record(assignment, resp, t0, ok=True)
 
             tool_calls = msg.get("tool_calls") or []
+            if not tool_calls:
+                # 兼容只输出文本工具调用的端点（如 deepseek-v4.1-flash 走
+                # <tool_call>{...}</tool_call> 文本协议，不填原生字段）。
+                tool_calls = self._parse_text_tool_calls(
+                    msg.get("content") or "")
             if tool_calls and rounds < self.max_tool_rounds:
                 sess["messages"].append({"role": "assistant",
                                          "content": msg.get("content", ""),
@@ -216,6 +235,56 @@ class ExecutingToolLoopExecutor:
         return assignment.session_id in self.sessions
 
     # ---------- 内部 ----------
+
+    @staticmethod
+    def _parse_text_tool_calls(text: str) -> list:
+        """从文本里解析工具调用块（文本工具协议兼容）。
+
+        支持两种格式：
+        1. <tool_call>{json}</tool_call>
+        2. DeepSeek DSML 标记（网关未剥离内部协议时泄漏到 content）：
+           <｜DSML｜ invoke name="X">
+           <｜DSML｜ parameter name="p" string="true">v</｜DSML｜ parameter>
+           </｜DSML｜ invoke>
+        返回与原生 tool_calls 同构的列表；无匹配返回 []。坏块静默跳过。
+        """
+        out = []
+        if not text:
+            return out
+        # 格式 1：JSON 块
+        for m in re.finditer(r"<tool_call>\s*(\{.*?\})\s*</tool_call>",
+                             text, re.S):
+            try:
+                obj = json.loads(m.group(1))
+            except ValueError:
+                continue
+            if not isinstance(obj, dict):
+                continue
+            fn = obj.get("function") if isinstance(obj.get("function"),
+                                                   dict) else obj
+            name = str(fn.get("name", ""))
+            args = fn.get("arguments", "{}")
+            if not isinstance(args, str):
+                args = json.dumps(args, ensure_ascii=False)
+            out.append({"id": f"text-{len(out)}", "type": "function",
+                        "function": {"name": name, "arguments": args}})
+        if out:
+            return out
+        # 格式 2：DSML invoke 块
+        for m in re.finditer(
+                r"<｜DSML｜\s*invoke\s+name=\"([^\"]+)\">(.*?)"
+                r"</｜DSML｜\s*invoke>", text, re.S):
+            name = m.group(1)
+            args = {}
+            for p in re.finditer(
+                    r"<｜DSML｜\s*parameter\s+name=\"([^\"]+)\"[^>]*>"
+                    r"(.*?)</｜DSML｜\s*parameter>", m.group(2), re.S):
+                args[p.group(1)] = p.group(2)
+            out.append({"id": f"dsml-{len(out)}", "type": "function",
+                        "function": {"name": name,
+                                     "arguments": json.dumps(
+                                         args, ensure_ascii=False)}})
+        return out
 
     @staticmethod
     def _is_report(text: str) -> bool:

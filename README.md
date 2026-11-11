@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/superagent-build)](https://pypi.org/project/superagent-build/)
 [![Python](https://img.shields.io/pypi/pyversions/superagent-build)](https://pypi.org/project/superagent-build/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![CI](https://github.com/aidless/superagent-build/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-21%20files%20203%20checks%20passed-brightgreen)
+![CI](https://github.com/aidless/superagent-build/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-22%20files%20216%20checks%20passed-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-success)
 
 > 定位：把 dsh-superagent-prototype（22k★）宣传了但没做的四件事真的做出来。
@@ -86,6 +86,21 @@ python3 tests/test_proactivity.py      # 开口阈值（M3）
 - [x] K3 择优修复（I5 缺口 C2）：calibration_best.py——calibrate_best 显式择优替代
       "网格第一组"：样本量门（n_speak≥3 才 trusted，防 n_speak=1 撑不起 precision）+
       (precision, n_speak, 保守度) 降序择优 + alternatives 全达标组审计（test_k3_calibration_best）
+- [x] v0.3.0 六条生态升级（源自 06-ecosystem-learning 四项目拆解，全部 RED→GREEN，
+      test_v03_upgrades 13 条）：
+      ① escalate 档——governance.py request_escalation + check(content_hash=)
+        一次性 lift（审批绑定内容哈希，AGT 式"可解除 BLOCK"）；
+      ② 预算进治理——intake(budget_tokens=) 票级 token 上限，超限 BUDGET_EXCEEDED
+        终票（成本账从事后度量升级为事中硬闸，AGT budgets.rego 思路）；
+      ③ 派发租约——Scheduler pre_deliver_check 钩子，派发/idle 回收前查票状态
+        （sessionguard 式写前重读，消派发与用户消息竞态）；
+      ④ APx 式信用门——speak_bad>0 的批次官方校准 INELIGIBLE（只给诊断值）；
+      ⑤ reason 词表——engine.REASONS 七种判决原因统一，词表外直接 ValueError；
+      ⑥ symlink 加固——O_NOFOLLOW 打开 + governance normpath 拦 lexical 穿越。
+- [x] 服役批（service/run_service.py）：真网关真杂活 3 任务（CHANGELOG 维护/
+      越界挑逗/运行日志）全链跑通——worker 经治理路径真写盘、越界请求自主拒绝、
+      T2 报告诚实标注"已提交、结果未确认"与盘上事实吻合；
+      文本工具协议兼容（<tool_call> JSON 与 DSML invoke 双格式解析）。
 
 ## 溯源：先拆解，后自研
 

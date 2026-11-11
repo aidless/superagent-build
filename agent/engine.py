@@ -17,6 +17,18 @@ from .outbox import pump as outbox_pump
 from .store import Store
 from .tickets import Tickets
 
+# reason 词表（AO autoreview 借鉴）：engine 产生的每条 ruling 都必须带
+# 词表内的 reason——可枚举、可统计、可审计，禁止裸字符串散落。
+REASONS = frozenset({
+    "deviation_repair_limit",     # 复审次数用尽，票被 deviation 终止
+    "budget_tokens_exceeded",     # 票级 token 预算超限（AGT budgets.rego 语义）
+    "governance_path_block",      # 写前治理拦截（路径越界/未声明）
+    "escalation_requested",       # 人工放行登记
+    "escalation_lifted",          # 一次性放行被消费
+    "idle_timeout",               # 调度器 idle 回收
+    "hallucinated_rule",          # 研判幻觉规则名，fail-closed
+})
+
 
 class Engine:
     def __init__(self, store: Store, cfg: AdmissionConfig, executor,
@@ -38,11 +50,34 @@ class Engine:
         self._repairs: dict[str, int] = {}   # ticket_id -> 已用修复轮数
         self.notices: list[dict] = []   # Router 主会话收到的通知（进度地图）
         self.observe_log: list[dict] = []    # I5：observe 判定的标注旁路（原始事件三数）
+        self._rulings: list[dict] = []  # 无 governance 时的本地判决留痕
+
+    # ---------- 判决留痕（统一入口：reason 必须在词表内） ----------
+    def _ruling(self, record: dict) -> None:
+        rec = dict(record)
+        rec.setdefault("reason", "unspecified")
+        if rec["reason"] not in REASONS:
+            raise ValueError(f"ruling reason 不在词表内: {rec['reason']!r}，"
+                             f"合法词表 = {sorted(REASONS)}")
+        rec.setdefault("at", time.time())
+        self._rulings.append(rec)
+        if self.governance is not None:
+            self.governance.ruling(rec)
+
+    def governance_rulings(self) -> list[dict]:
+        """读回判决流：有 governance 走它的 append-only 流，否则本地副本。"""
+        if self.governance is not None:
+            return self.governance.read_rulings()
+        return list(self._rulings)
 
     # ---------- 入口：一条消息进入 ----------
-    def intake(self, inp: Input, mandate_rules: Optional[dict] = None) -> dict:
+    def intake(self, inp: Input, mandate_rules: Optional[dict] = None,
+               budget_tokens: Optional[int] = None) -> dict:
         """mandate_rules: 可选的 Mandate 附加规则（如 {"allow_paths": [...]}），
-        建 Mandate 时带上——治理预声明依赖它。"""
+        建 Mandate 时带上——治理预声明依赖它。
+        budget_tokens: 票级 token 预算（AGT budgets.rego 借鉴）——累计用量
+        超限即终止票 + 落 ruling reason=budget_tokens_exceeded（成本从
+        "事后度量"升级为"事中硬闸"）。"""
         # 幂等：同 id 消息只处理一次（先存后做）
         if not self.store.record_receipt(f"input:{inp.id}", inp.text):
             return {"disposition": "duplicate", "input_id": inp.id}
@@ -61,6 +96,10 @@ class Engine:
 
         if disposition == "accept":
             ticket_id = self._open_ticket(inp, assessment, mandate_rules)
+            if budget_tokens is not None:
+                self.store.put(f"budget:{ticket_id}",
+                               {"tokens": int(budget_tokens),
+                                "set_at": time.time()})
             return {"disposition": "accept", "ticket_id": ticket_id}
 
         # rejected_* / observe：静默是产品能力，但判定必须留痕
@@ -111,8 +150,21 @@ class Engine:
         self.tickets._persist(self.tickets.get(t.id))
         return t.id
     # ---------- worker 报告回调 ----------
+    def _tokens_used(self, ticket_id: str) -> int:
+        """该票累计 token 用量（从 executor 的 metrics 台账读）。
+        executor 无台账时返回 0（预算闸自动旁路——没有计量就没有硬闸）。"""
+        metrics = getattr(self.executor, "metrics", None)
+        if metrics is None:
+            return 0
+        total = 0
+        for r in getattr(metrics, "records", []):
+            if getattr(r, "ticket_id", None) == ticket_id:
+                total += int(getattr(r, "prompt_tokens", 0) or 0)
+                total += int(getattr(r, "completion_tokens", 0) or 0)
+        return total
+
     def on_worker_report(self, assignment, report_payload: dict) -> dict:
-        """Watchdog 复核 → 治理判决 → 回复出站。"""
+        """Watchdog 复核 → 预算闸 → 治理判决 → 回复出站。"""
         ticket = self.tickets.get(assignment.ticket_id)
         verdict_label = "ok"
         if self.watchdog is not None:
@@ -148,13 +200,26 @@ class Engine:
                     return {"verdict": verdict_label, "replied": False,
                             "repaired": True, "repair_round": used + 1,
                             "reply_after_repair": reply_after}
-                if self.governance is not None:
-                    self.governance.ruling({
-                        "ticket_id": assignment.ticket_id,
-                        "verdict": "DEVIATION", "reasons": review.reasons,
-                        "at": time.time()})
+                self._ruling({
+                    "ticket_id": assignment.ticket_id,
+                    "verdict": "DEVIATION", "reason": "deviation_repair_limit",
+                    "reasons": review.reasons})
                 self.tickets.end(assignment.ticket_id)
                 return {"verdict": verdict_label, "replied": False, "escalated": True}
+
+        # 预算闸（②）：复核证据已留痕，这里做成本硬闸——超限即终止，不回复。
+        budget = self.store.get(f"budget:{assignment.ticket_id}")
+        if budget is not None:
+            used = self._tokens_used(assignment.ticket_id)
+            if used > int(budget.get("tokens", 0)):
+                self._ruling({
+                    "ticket_id": assignment.ticket_id,
+                    "verdict": "BUDGET_EXCEEDED",
+                    "reason": "budget_tokens_exceeded",
+                    "used_tokens": used,
+                    "budget_tokens": int(budget.get("tokens", 0))})
+                self.tickets.end(assignment.ticket_id)
+                return {"verdict": "budget_exceeded", "replied": False}
 
         # 主动性：任务完成是一个候选开口事件。
         # confidence 来自证据源合成（I5）：缺 estimator 时保守用历史硬编码值。
@@ -189,15 +254,17 @@ class Engine:
         return {"verdict": verdict_label, "replied": True}
 
     # ---------- 写前治理挂点（executor 层调用） ----------
-    def pre_write(self, ticket_id: str, path: str) -> bool:
-        """worker 要写文件时先问治理。True=放行。"""
+    def pre_write(self, ticket_id: str, path: str,
+                  content_hash: str | None = None) -> bool:
+        """worker 要写文件时先问治理。True=放行。
+        content_hash 可选：escalate 档消费一次性人工放行（路径+内容哈希绑定）。"""
         if self.governance is None:
             return True
-        res = self.governance.check(ticket_id, path)
+        res = self.governance.check(ticket_id, path, content_hash=content_hash)
         if res.verdict != "ALLOW":
-            self.governance.ruling({"ticket_id": ticket_id, "verdict": "BLOCK",
-                                    "path": path, "reason": res.reason,
-                                    "at": time.time()})
+            self._ruling({"ticket_id": ticket_id, "verdict": "BLOCK",
+                          "reason": "governance_path_block",
+                          "path": path, "detail": res.reason})
             return False
         return True
 

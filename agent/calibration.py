@@ -146,6 +146,10 @@ class LabelStore:
         precision = (so / denom) if denom > 0 else None
         result: dict = dict(counts)
         result["speak_precision"] = precision
+        # 信用门（APx 借鉴）：库里存在 speak_bad = watchdog 抓到过真实坏开口
+        # → 本批数据只能做诊断，官方校准置 INELIGIBLE（prevent 假 precision
+        # 从冲突数据上刷出来）。
+        result["ineligible"] = sb > 0
         return result
 
 
