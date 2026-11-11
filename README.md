@@ -180,7 +180,7 @@ ground truth 标签的任务集（6 explicit 合规 + 15 mention 合规 + 9 ment
 说明它测的是固定的介入计数差，不是成本结构。**成本账在本仓只作假设压力测试，
 不作"省了多少钱"的证据。**
 
-证据包：`evidence/`（9 个只读副本 + `MANIFEST.sha256` + `REPRODUCE.md`），
+证据包：`evidence/`（10 个只读副本 + `MANIFEST.sha256` + `REPRODUCE.md`），
 `service/make_evidence_bundle.py --verify` 可复算，CI 里有一步跑它；篡改任一字节
 即 `ok:false`（自测覆盖）。
 

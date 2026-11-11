@@ -74,7 +74,7 @@
   - 结论修正。**治理链不引入可测的 token 税**，同时没有证据写「双层省 token」。成本账的正确用法是当假设压力测试，价值证据得来自确定性的拦截与复核行为。
   - 报告见 `results/real/sweep_b/evidence_report.json`（含 `replication_check` 与 `v_sensitivity`），只读副本 `evidence/sweep/b_evidence_report.json`。
 - **输入侧校准**。`results/real/d4_calibration/calibration.json` 记 13 条标注，speak_ok 9 / wait_ok 3 / wait_bad 1，`speak_precision` 1.0，`applied_params=(2.0, 0.5, 0.05)`，另有 1 条人工覆写把「紧急求助被静默」记成 wait_bad。
-- **测试与验真**。`python3 -m pytest tests/ -q` 得 177 passed；`python3 service/make_evidence_bundle.py --verify` 与 `sha256sum -c evidence/MANIFEST.sha256` 可逐份验真 `evidence/` 的 9 份只读副本；复算命令见 `evidence/REPRODUCE.md`。
+- **测试与验真**。`python3 -m pytest tests/ -q` 得 177 passed；`python3 service/make_evidence_bundle.py --verify` 与 `sha256sum -c evidence/MANIFEST.sha256` 可逐份验真 `evidence/` 的 10 份只读副本；复算命令见 `evidence/REPRODUCE.md`。
 
 ## 我不打算藏的五处局限
 

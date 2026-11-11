@@ -1,6 +1,12 @@
-## v0.3.2 — 2026-11-11
+## v0.3.2 发版回执（2026-11-11）
 
-2026-11-10
+- PyPI：twine 上传 `superagent_build-0.3.2-py3-none-any.whl` + sdist，twine check 双 PASSED，`pypi.org/pypi/superagent-build/json` 验号 latest=0.3.2、releases `0.1.0 / 0.3.1 / 0.3.2`；wheel 内含 `agent/calibration_loop.py` 等 21 个模块。
+- Git：tag `v0.3.2` 已推；GitHub Release https://github.com/aidless/superagent-build/releases/tag/v0.3.2 已建。
+- CI 两次修复：首轮 f3b9618 因 `tests/test_p1a_calibration_apply.py` 读未入库的 `results/real/d4_calibration/calibration.json` 失败（`FileNotFoundError`，1 failed / 176 passed）→ 7e02e63 把该报告收进 evidence bundle（9→10 份副本），测试改读 `evidence/calibration/d4_calibration.json`，CI `completed success`；脚本套件新增 `interview_drill.py --selftest` 步骤。
+- 分发：awesome-list PR https://github.com/e2b-dev/awesome-ai-agents/pull/1971 已开（state=open）；知乎/掘金/Reddit/HN/X 五渠道稿子就绪但账号门禁未过，见 `docs/DISTRIBUTION.md` 第七节回执。
+- 终态：pytest 177 passed；9 脚本套件 rc=0；evidence `--verify` ok checked=10；coverage 80% 与徽章一致。
+
+## v0.3.2 — 2026-11-11
 
 外部口径止血：PyPI 0.1.0 → **0.3.1**（twine 上传，`pypi.org/pypi/superagent-build/json` 验号 latest=0.3.1）。
 
@@ -11,7 +17,7 @@
   Δtokens **−628**（8-run 是 +1654）、每对均值 −39.25、逐 seed 符号翻转、CI
   [−8.3339, −8.3329] 不跨 0、p* 不存在 → **推翻"双层省 token"**，修正为
   "治理链不引入可测 token 税；成本账只作假设压力测试"。
-- `evidence/` 证据包：9 文件 + `MANIFEST.sha256`（`sha256sum -c` 兼容）+
+- `evidence/` 证据包：10 文件 + `MANIFEST.sha256`（`sha256sum -c` 兼容）+
   `REPRODUCE.md`；篡改即 `ok:false`，CI 增设 verify 步骤。
 
 治理 §8 差异七处实修（M23..M29，全部带行号锚点写进规范）：
