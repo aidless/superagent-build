@@ -79,12 +79,14 @@ def apply_calibration(cfg: ProactivityConfig, result: dict) -> bool:
 
 
 def close_loop(observe_events: list[dict], state_dir: str,
-               target_precision: float = 0.8) -> dict:
+               target_precision: float = 0.8, labeler=None) -> dict:
     """端到端：攒事件 → 标注入库 → 校准 → （达标则）出可应用参数。
+    labeler 缺省用 heuristic_label；传自定义可做人工覆写（见 service/
+    run_d4_calibration.py 的 wait_bad 金标）。
     返回 {"n_labeled", "stats", "calibration", "applied_params"(可选)}。
     """
     store = LabelStore(path=os.path.join(state_dir, "labels.jsonl"))
-    n = ingest_observe_log(observe_events, store)
+    n = ingest_observe_log(observe_events, store, labeler=labeler)
     stats = store.stats()
     result = run_calibration(store, target_precision=target_precision)
     out = {"n_labeled": n, "stats": stats, "calibration": result}

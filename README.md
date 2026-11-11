@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/superagent-build)](https://pypi.org/project/superagent-build/)
 [![Python](https://img.shields.io/pypi/pyversions/superagent-build)](https://pypi.org/project/superagent-build/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![CI](https://github.com/aidless/superagent-build/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-23%20files%20218%20checks%20passed-brightgreen)
+![CI](https://github.com/aidless/superagent-build/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-30%20files%20153%20pytest%20%2B%209%20script%20suites-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-success)
 
 **这是什么**：一个把治理当第一公民的多 agent 内核——每条输入先过两级准入，
@@ -126,7 +126,8 @@ ground truth 标签的任务集（6 explicit 合规 + 15 mention 合规 + 9 ment
       dual 臂（Engine 全链）真跑 Magpie 网关（deepseek-v4.1-flash），2任务×2seeds×2臂=8 runs
       真实 usage；delta_tokens=1654 vs 介入节省 4 次 → p*=0.0121 元/token、verdict=DUAL_WINS
       （results/real/sweep_curve.json，诚实口径：介入价值 V=5.0 为假设参数；
-      **8 runs 是探路 batch，结论级 32-run sweep 待跑，DUAL_WINS 暂作方向性证据**）
+      8 runs 只是探路 batch —— 结论级验证见下方 v0.3.2 的 32-run，且它**推翻了**
+      这里的 token 符号结论）
 - [x] K2 真标注数据：12 真任务（合规/挑逗/闲聊）独立线程真跑，observe 攒 12 事件 →
       close_loop 真校准 applied_params=(0.5,0.2,0.05)（precision 1.0 n_speak=3 trusted）；
       诚实发现：confidence 同质化（单一证据源+watchdog 全 ok → 12 事件同置信度），
@@ -143,7 +144,8 @@ ground truth 标签的任务集（6 explicit 合规 + 15 mention 合规 + 9 ment
       ③ 派发租约——Scheduler pre_deliver_check 钩子，派发/idle 回收前查票状态
         （sessionguard 式写前重读，消派发与用户消息竞态）；
       ④ APx 式信用门——speak_bad>0 的批次官方校准 INELIGIBLE（只给诊断值）；
-      ⑤ reason 词表——engine.REASONS 七种判决原因统一，词表外直接 ValueError；
+      ⑤ reason 词表——engine.REASONS 判决原因统一，词表外直接 ValueError
+        （v0.3.0 七种 → v0.3.2 八种，新增 failed_same_sha_retry_limit）；
       ⑥ symlink 加固——O_NOFOLLOW 打开 + governance normpath 拦 lexical 穿越。
 - [x] v0.3.1 修复：复审环修复计数落库（engine.py _repairs 内存 dict → store kv
       "repairs:{tid}" 唯一事实源）——崩溃恢复后 max_repairs 不再形同虚设
@@ -153,6 +155,72 @@ ground truth 标签的任务集（6 explicit 合规 + 15 mention 合规 + 9 ment
       越界挑逗/运行日志）全链跑通——worker 经治理路径真写盘、越界请求自主拒绝、
       T2 报告诚实标注"已提交、结果未确认"与盘上事实吻合；
       文本工具协议兼容（<tool_call> JSON 与 DSML invoke 双格式解析）。
+
+## v0.3.2（main HEAD，未发版）：方向性证据 → 结论，治理契约 → 机器可读规范
+
+> 版本口径：PyPI 当前发布快照是 **0.3.1**；本节工作已在 `main`，**尚未发版**
+> （下次发版统一推 0.3.2）。发布稿见 `docs/RELEASE_CN.md` / `docs/RELEASE_EN.md`。
+
+### 32-run 真跑推翻了 8-run 的符号结论
+
+`service/run_sweep_b.py`：4 任务 × 4 seeds × 2 臂 = 32 runs，真网关
+`deepseek-v4.1-flash`，usage 逐调用取真实值（`results/real/sweep_b/runs.jsonl`）。
+
+| 指标 | 8-run（K1 探路） | 32-run（v0.3.2） |
+|---|---|---|
+| Δtokens（dual − single） | +1654 | **−628** |
+| 每对均值 Δtokens | — | **−39.25**（噪声量级） |
+| 同批内逐 seed 符号翻转 | 未测 | **是**（`sign_flips_within_batch=true`） |
+| 配对重采样 95% CI | 未算 | **[−8.3339, −8.3329]，不跨 0** |
+| p*（ΔN·V/ΔT） | 0.0121 元/token | **null**（ΔT<0 侧平衡点不存在） |
+
+结论修正：治理链**不引入可测 token 税**，但同样**不能**宣称"双层省 token"——
+符号在 seed 之间随机翻转，−628 是 16 对里凑出来的净值。判决 `DUAL_WINS` 由介入
+计数假设（single=2 / dual=1）单边驱动；V 从 0.001 扫到 20 全是 DUAL_WINS，恰好
+说明它测的是固定的介入计数差，不是成本结构。**成本账在本仓只作假设压力测试，
+不作"省了多少钱"的证据。**
+
+证据包：`evidence/`（9 个只读副本 + `MANIFEST.sha256` + `REPRODUCE.md`），
+`service/make_evidence_bundle.py --verify` 可复算，CI 里有一步跑它；篡改任一字节
+即 `ok:false`（自测覆盖）。
+
+### 治理契约机器可读化
+
+- `docs/spec/GOVERNANCE.md`：RFC2119 关键词 + 8 个干预点覆盖表（**5 处诚实标留白**）+
+  判决闭合集 `ALLOW/BLOCK/ESCALATE`（ESCALATE 是 ruling 流第三态 + 一次性 lift 绑
+  `content_hash`）+ **M1..M22 每条 MUST 配一个 conformance 测试**
+  （`tests/test_conformance.py`，23 条测试，每条内部 RED→GREEN）+ S1..S8 SHOULD 偏差表。
+- `docs/adr/ADR-0001-fail-closed.md`：fail-closed 不许做成配置开关。落地时收口了一条
+  真偏差——`pre_write()` 在治理挂点缺位时曾 `return True`，现为 BLOCK + 判决留痕
+  （M22 守住）。
+
+### 先修再攒 K2（estimator 扩维 + 输入侧候选 + 复审熔断）
+
+- **Estimator 六维证据**：watchdog verdict / has_explicit_marker / is_bot /
+  text_len 分档 / tool_rounds / repairs；空证据仍 0.4，旧单源口径逐字不变
+  （`test_v04_estimator.py`）。
+- **输入侧候选**：被拒/闲聊输入造低效用候选写 `observe_log`（8 字段与完成侧一致），
+  不写回复、不改 disposition（`test_v04_input_events.py`）。
+- **复审熔断**：连续 watchdog 非 OK 计数落 store kv `review_fail:{tid}`，OK 清零，
+  超上限（默认 3，对齐 agent-orchestrator `autoReviewFailedRetryLimit=3`）即熔断并落
+  `reason: failed_same_sha_retry_limit`（`test_v04_review_fuse.py`）。
+- **assessor 调用入台账**：成功记真实 usage，失败记 `ok=False` 零 token——失败次数
+  可观测，且不污染 token 成本（`test_v04_assessor_ledger.py`）。
+- **真跑 10 任务批**（`service/run_daily_batch.py`）：observe 事件从"全同质 conf=0.533"
+  变成 0.480 / 0.510 / 0.533 三档；真校准结果
+  `speak_ok=9 / wait_ok=3 / wait_bad=1` → `calibrated=True`，
+  `applied_params=(c_false=2.0, c_speak=0.5, lam=0.05)`——比早期
+  `(0.5, 0.2, 0.05)` 更保守，是 K3 择优键（精度优先→同精度开口更多→更保守参数）
+  在真数据上的体现（`results/real/d4_calibration/calibration.json`）。
+  诚实口径：13 条事件、启发式标注 + 1 条人工覆写（"紧急求助被静默"记 wait_bad），
+  是方向性验证，不是双人独立标注的充分统计。
+
+### 分发与面试转化
+
+- **PyPI 0.3.1 已上线**（此前 README 说 0.3.x 而 PyPI 只有 0.1.0——对外口径断裂已修）。
+- `issues/1`：上游五卖点兑现度核对表归档（上游仓 `has_issues=false`，无法直接提交）。
+- `docs/RELEASE_CN.md` / `docs/RELEASE_EN.md`（中英发布稿）+
+  `docs/INTERVIEW.md`（20 问，123 处 `file:line` 引用全部现场验过）。
 
 ## 溯源：先拆解，后自研
 

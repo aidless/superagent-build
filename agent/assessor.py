@@ -150,7 +150,11 @@ class LLMAssessor:
     # ---------- 研判 ----------
 
     def _ledger_record(self, inp: Input, resp, t0: float, ok: bool) -> None:
-        """研判调用逐次入成本账（kind=assessor，无票据归属留空）。"""
+        """逐次尝试入成本账（kind=assessor，无票据归属留空）。
+
+        成功调用记真实 usage；失败调用（解析失败 / 网络异常 / 超时）记
+        ok=False 的零 token 尝试记录——失败次数必须可观测（否则无法回答
+        "研判这一层挂了多久"），而 usage 为 0 不污染 token 成本。"""
         if self.metrics is None:
             return
         usage = (resp or {}).get("usage") or {}
@@ -189,7 +193,8 @@ class LLMAssessor:
             resp = self._transport(payload)
             data = _parse_strict_json(_extract_content(resp))
             self._ledger_record(inp, resp, t0, ok=True)
-        except Exception as e:  # 解析失败 / 网络异常 / 超时 → fail-closed
+        except Exception as e:  # 解析失败 / 网络异常 / 超时 → fail-closed（不抛）
+            # 失败也入账：ok=False + 零 token，失败次数可观测（tests/test_polish.py:125-138）
             self._ledger_record(inp, None, t0, ok=False)
             return _fail_closed(gate_result, f"{type(e).__name__}: {e}")
 

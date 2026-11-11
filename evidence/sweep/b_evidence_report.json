@@ -1,0 +1,244 @@
+{
+  "n_runs": 32,
+  "n_pairs": 16,
+  "tasks": [
+    "t-l1",
+    "t-l2",
+    "t-l3",
+    "t-l4"
+  ],
+  "seeds": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "elapsed_s": 0.126,
+  "new_runs_this_call": 0,
+  "model": "deepseek-v4.1-flash",
+  "endpoint": "http://127.0.0.1:3425/v1/chat/completions",
+  "curve_default_costmodel": {
+    "delta_tokens": -628,
+    "delta_interventions": 16,
+    "p_star": null,
+    "c_star": null,
+    "cost_deltas": [
+      -8.333845999999998,
+      -8.333386,
+      -8.335098000000002,
+      -8.33407,
+      -8.332186,
+      -8.33403,
+      -8.334054000000002,
+      -8.334442,
+      -8.333914,
+      -8.333510000000002,
+      -8.330709999999998,
+      -8.33367,
+      -8.332294000000001,
+      -8.33289,
+      -8.333217999999999,
+      -8.334538
+    ],
+    "ci_low": -8.333948750000001,
+    "ci_high": -8.332929,
+    "verdict": "DUAL_WINS"
+  },
+  "ci_readout": {
+    "n_pairs": 16,
+    "mean_delta_cost": -8.333491,
+    "ci_low": -8.333949,
+    "ci_high": -8.332929,
+    "crosses_zero": false,
+    "verdict": "DUAL_WINS"
+  },
+  "v_sensitivity": [
+    {
+      "n_pairs": 16,
+      "mean_delta_cost": -0.001703,
+      "ci_low": -0.002452,
+      "ci_high": -0.001053,
+      "crosses_zero": false,
+      "verdict": "DUAL_WINS",
+      "value_per_intervention": 0.001,
+      "delta_tokens": -2813,
+      "delta_interventions": 16,
+      "p_star": null
+    },
+    {
+      "n_pairs": 16,
+      "mean_delta_cost": -0.010703,
+      "ci_low": -0.011452,
+      "ci_high": -0.010053,
+      "crosses_zero": false,
+      "verdict": "DUAL_WINS",
+      "value_per_intervention": 0.01,
+      "delta_tokens": -2813,
+      "delta_interventions": 16,
+      "p_star": null
+    },
+    {
+      "n_pairs": 16,
+      "mean_delta_cost": -0.100703,
+      "ci_low": -0.101452,
+      "ci_high": -0.100053,
+      "crosses_zero": false,
+      "verdict": "DUAL_WINS",
+      "value_per_intervention": 0.1,
+      "delta_tokens": -2813,
+      "delta_interventions": 16,
+      "p_star": null
+    },
+    {
+      "n_pairs": 16,
+      "mean_delta_cost": -0.500703,
+      "ci_low": -0.501452,
+      "ci_high": -0.500053,
+      "crosses_zero": false,
+      "verdict": "DUAL_WINS",
+      "value_per_intervention": 0.5,
+      "delta_tokens": -2813,
+      "delta_interventions": 16,
+      "p_star": null
+    },
+    {
+      "n_pairs": 16,
+      "mean_delta_cost": -1.000703,
+      "ci_low": -1.001452,
+      "ci_high": -1.000053,
+      "crosses_zero": false,
+      "verdict": "DUAL_WINS",
+      "value_per_intervention": 1.0,
+      "delta_tokens": -2813,
+      "delta_interventions": 16,
+      "p_star": null
+    },
+    {
+      "n_pairs": 16,
+      "mean_delta_cost": -2.000703,
+      "ci_low": -2.001452,
+      "ci_high": -2.000053,
+      "crosses_zero": false,
+      "verdict": "DUAL_WINS",
+      "value_per_intervention": 2.0,
+      "delta_tokens": -2813,
+      "delta_interventions": 16,
+      "p_star": null
+    },
+    {
+      "n_pairs": 16,
+      "mean_delta_cost": -5.000703,
+      "ci_low": -5.001452,
+      "ci_high": -5.000053,
+      "crosses_zero": false,
+      "verdict": "DUAL_WINS",
+      "value_per_intervention": 5.0,
+      "delta_tokens": -2813,
+      "delta_interventions": 16,
+      "p_star": null
+    },
+    {
+      "n_pairs": 16,
+      "mean_delta_cost": -10.000703,
+      "ci_low": -10.001452,
+      "ci_high": -10.000053,
+      "crosses_zero": false,
+      "verdict": "DUAL_WINS",
+      "value_per_intervention": 10.0,
+      "delta_tokens": -2813,
+      "delta_interventions": 16,
+      "p_star": null
+    },
+    {
+      "n_pairs": 16,
+      "mean_delta_cost": -20.000703,
+      "ci_low": -20.001452,
+      "ci_high": -20.000053,
+      "crosses_zero": false,
+      "verdict": "DUAL_WINS",
+      "value_per_intervention": 20.0,
+      "delta_tokens": -2813,
+      "delta_interventions": 16,
+      "p_star": null
+    }
+  ],
+  "flip_point_V": 0.001,
+  "replication_check": {
+    "per_pair_delta_tokens": [
+      {
+        "pair": "t-l1-single-0 vs t-l1-dual-0",
+        "delta_tokens": -128
+      },
+      {
+        "pair": "t-l2-single-0 vs t-l2-dual-0",
+        "delta_tokens": -13
+      },
+      {
+        "pair": "t-l3-single-0 vs t-l3-dual-0",
+        "delta_tokens": -441
+      },
+      {
+        "pair": "t-l4-single-0 vs t-l4-dual-0",
+        "delta_tokens": -184
+      },
+      {
+        "pair": "t-l1-single-1 vs t-l1-dual-1",
+        "delta_tokens": 287
+      },
+      {
+        "pair": "t-l2-single-1 vs t-l2-dual-1",
+        "delta_tokens": -174
+      },
+      {
+        "pair": "t-l3-single-1 vs t-l3-dual-1",
+        "delta_tokens": -180
+      },
+      {
+        "pair": "t-l4-single-1 vs t-l4-dual-1",
+        "delta_tokens": -277
+      },
+      {
+        "pair": "t-l1-single-2 vs t-l1-dual-2",
+        "delta_tokens": -145
+      },
+      {
+        "pair": "t-l2-single-2 vs t-l2-dual-2",
+        "delta_tokens": -44
+      },
+      {
+        "pair": "t-l3-single-2 vs t-l3-dual-2",
+        "delta_tokens": 656
+      },
+      {
+        "pair": "t-l4-single-2 vs t-l4-dual-2",
+        "delta_tokens": -84
+      },
+      {
+        "pair": "t-l1-single-3 vs t-l1-dual-3",
+        "delta_tokens": 260
+      },
+      {
+        "pair": "t-l2-single-3 vs t-l2-dual-3",
+        "delta_tokens": 111
+      },
+      {
+        "pair": "t-l3-single-3 vs t-l3-dual-3",
+        "delta_tokens": 29
+      },
+      {
+        "pair": "t-l4-single-3 vs t-l4-dual-3",
+        "delta_tokens": -301
+      }
+    ],
+    "mean_delta_tokens_per_pair": -39.25,
+    "sign_flips_within_batch": true,
+    "k1_8run_delta_tokens": 1654,
+    "k1_vs_b_sign_agrees": false
+  },
+  "caveats": [
+    "介入次数是记账假设 single=2 / dual=1，非实测人打断次数；V 敏感性扫的是'假设成立时结论对 V 稳不稳'。",
+    "任务带 /do 显式标记 → explicit 路由，dual 臂 LLMAssessor 不触发；研判开销见 results/eval/assessor_ab/report.json。",
+    "成本单价取 framework.CostModel 默认 4.0 元/1M tokens。",
+    "ΔT 的符号在本批内逐 seed 翻转（见 replication_check）：token 差属噪声量级，判决 DUAL_WINS 由介入计数假设单边驱动，不能读成'双层省 token'。"
+  ]
+}

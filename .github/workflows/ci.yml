@@ -29,3 +29,7 @@ jobs:
             python3 "$f" > /dev/null
           done
           echo "all script suites passed"
+      - name: evidence manifest verifies
+        run: |
+          python3 service/make_evidence_bundle.py --verify
+          echo "evidence bundle sha256 manifest OK"

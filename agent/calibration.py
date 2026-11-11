@@ -32,6 +32,79 @@ _NEUTRAL = 0.5          # 缺证据源时的中性值
 _MISSING_DISCOUNT = 0.8  # 有源缺失时对结果打的折
 _EMPTY_CONSERVATIVE = 0.4  # 空 evidence 的保守值
 
+# v0.4（D1）扩展证据源：watchdog 判定 + 任务类型/输入信号 + 工具轮数 +
+# 修复次数。只有 evidence 出现这些键时才启用扩维合成；无扩展键时严格保持
+# 原三源加权平均口径（旧测试精确数值不得漂移）。
+EXTENDED_SOURCES = (
+    "watchdog_verdict",      # ok / deviation / unassessable
+    "has_explicit_marker",   # bool：输入是否带显式指令
+    "is_bot",                # bool：是否机器消息
+    "text_len",              # int：输入长度，分档
+    "tool_rounds",           # int：工具轮数
+    "repairs",               # int：修复次数
+)
+
+
+def _as_float(value, default: float) -> float:
+    """脏数据不抛：转不成 float 时回退默认值。"""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_bool(value) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "y", "on")
+    return bool(value)
+
+
+def _clamp(score: float) -> float:
+    if score < 0.0:
+        return 0.0
+    if score > 1.0:
+        return 1.0
+    return score
+
+
+def _norm_extended(key: str, value) -> float:
+    """把扩展证据归一化成 [0,1] 的确证度分量（证据越充分越高）。"""
+    if key == "watchdog_verdict":
+        label = str(value).strip().lower()
+        if label in ("ok", "pass", "true", "1", "1.0"):
+            return 1.0
+        if label in ("deviation", "fail", "false", "0", "0.0"):
+            return 0.0
+        return 0.5   # unassessable / 未知 → 中性
+    if key == "has_explicit_marker":
+        return 1.0 if _as_bool(value) else 0.4
+    if key == "is_bot":
+        return 0.2 if _as_bool(value) else 0.8
+    if key == "text_len":
+        n = _as_float(value, 0.0)
+        if n <= 32.0:
+            return 0.3
+        if n <= 256.0:
+            return 0.6
+        return 0.9
+    if key == "tool_rounds":
+        n = _as_float(value, 0.0)
+        if n <= 0.0:
+            return 0.9
+        if n == 1.0:
+            return 0.75
+        if n == 2.0:
+            return 0.6
+        return 0.45
+    if key == "repairs":
+        n = _as_float(value, 0.0)
+        if n <= 0.0:
+            return 0.9
+        if n == 1.0:
+            return 0.6
+        return 0.3
+    return 0.5
+
 
 class ConfidenceEstimator:
     """证据源 → 确证度 p ∈ [0,1] 的合成器。
@@ -41,6 +114,10 @@ class ConfidenceEstimator:
       最终加权平均乘 0.8 打折（缺证据要保守）。
     - 空 evidence 直接返回 0.4（最保守，连有多少源都不知道）。
     - 结果始终 clamp 到 [0,1]（宽容越界输入，避免脏数据撑爆阈值判定）。
+    - evidence 含 EXTENDED_SOURCES 里的键时启用扩维合成：这些信号先归一化
+      成 [0,1] 分量，再与基础源一起加权平均（缺基础源仍打 0.8 折）。
+      语义变更仅限含扩展键的输入；空 evidence 仍 0.4，无扩展键时与旧口径
+      逐字一致。
 
     weights: 可选 {"源名": 权重}。None → 三个默认源各 1.0；显式给出则以其为
              唯一证据源集合（可用于单源/自定义源场景）。
@@ -55,6 +132,11 @@ class ConfidenceEstimator:
     def estimate(self, evidence: dict) -> float:
         if not evidence:
             return _EMPTY_CONSERVATIVE
+
+        # v0.4（D1）：含扩展键走扩维合成；无扩展键严格保持原口径。
+        extended = [k for k in EXTENDED_SOURCES if k in evidence]
+        if extended:
+            return self._estimate_extended(evidence, extended)
 
         total = 0.0
         total_w = 0.0
@@ -82,6 +164,33 @@ class ConfidenceEstimator:
         if score > 1.0:
             return 1.0
         return score
+
+    def _estimate_extended(self, evidence: dict, extended: list[str]) -> float:
+        """扩维合成：基础源（self.weights）+ 归一化扩展源统一加权平均。
+        缺基础源仍乘 _MISSING_DISCOUNT；结果始终 clamp 到 [0,1]。"""
+        total = 0.0
+        total_w = 0.0
+        missing = False
+        for src, w in self.weights.items():
+            if w <= 0:
+                continue
+            if src in evidence:
+                val = _clamp(_as_float(evidence[src], _NEUTRAL))
+            else:
+                val = _NEUTRAL
+                missing = True
+            total += w * val
+            total_w += w
+        for key in extended:
+            total += _norm_extended(key, evidence[key])
+            total_w += 1.0
+
+        if total_w <= 0:
+            return _EMPTY_CONSERVATIVE
+        score = total / total_w
+        if missing:
+            score *= _MISSING_DISCOUNT
+        return _clamp(score)
 
 
 # ---------- LabelStore 常量 ----------

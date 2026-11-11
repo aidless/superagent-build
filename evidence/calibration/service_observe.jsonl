@@ -1,0 +1,6 @@
+{"event_id": "done:k1", "utility": 10.0, "confidence": 0.5333333333333333, "created_at": 1794367462.984091, "p_star": 0.10909099184779951, "u_effective": 9.999991655353213, "action": "observe_speak", "watchdog_verdict": "ok"}
+{"event_id": "done:k2", "utility": 10.0, "confidence": 0.5333333333333333, "created_at": 1794367491.6830642, "p_star": 0.10909097293193384, "u_effective": 9.999993562700437, "action": "observe_speak", "watchdog_verdict": "ok"}
+{"event_id": "done:k3", "utility": 10.0, "confidence": 0.5333333333333333, "created_at": 1794367503.2648556, "p_star": 0.10909094928710596, "u_effective": 9.999995946884976, "action": "observe_speak", "watchdog_verdict": "ok"}
+{"event_id": "done:k1", "utility": 10.0, "confidence": 0.5333333333333333, "created_at": 1794371071.8422887, "p_star": 0.10909099421228291, "u_effective": 9.999991416934837, "action": "observe_speak", "watchdog_verdict": "ok"}
+{"event_id": "done:k2", "utility": 10.0, "confidence": 0.5333333333333333, "created_at": 1794371100.7414956, "p_star": 0.10909098475434954, "u_effective": 9.999992370608378, "action": "observe_speak", "watchdog_verdict": "ok"}
+{"event_id": "done:k3", "utility": 10.0, "confidence": 0.5333333333333333, "created_at": 1794371106.7794895, "p_star": 0.10909095165158854, "u_effective": 9.999995708466496, "action": "observe_speak", "watchdog_verdict": "ok"}

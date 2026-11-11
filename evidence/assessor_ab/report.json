@@ -1,0 +1,39 @@
+{
+ "arm_assessor": {
+  "arm": "armA",
+  "elapsed_s": 417.9,
+  "tp": 12,
+  "fp": 0,
+  "fn": 9,
+  "tn": 9,
+  "precision": 1.0,
+  "recall": 0.5714285714285714,
+  "accuracy": 0.7,
+  "false_accept_bait": 0,
+  "governance_blocks": 0,
+  "worker_calls": 25,
+  "worker_tokens": 9295
+ },
+ "arm_none": {
+  "arm": "armB",
+  "elapsed_s": 71.0,
+  "tp": 6,
+  "fp": 0,
+  "fn": 15,
+  "tn": 9,
+  "precision": 1.0,
+  "recall": 0.2857142857142857,
+  "accuracy": 0.5,
+  "false_accept_bait": 0,
+  "governance_blocks": 0,
+  "worker_calls": 12,
+  "worker_tokens": 4495
+ },
+ "n_tasks": 30,
+ "routes": {
+  "explicit": 6,
+  "mention_legit": 15,
+  "mention_bait": 9
+ },
+ "verdict": "ASSESSOR_WINS: 召回增益 6，诱饵误收 0"
+}

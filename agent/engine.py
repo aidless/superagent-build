@@ -27,6 +27,7 @@ REASONS = frozenset({
     "escalation_lifted",          # 一次性放行被消费
     "idle_timeout",               # 调度器 idle 回收
     "hallucinated_rule",          # 研判幻觉规则名，fail-closed
+    "failed_same_sha_retry_limit",  # 连续 watchdog 非 OK 复审次数超上限（AO autoreview=3）
 })
 
 
@@ -35,7 +36,9 @@ class Engine:
                  deliver: Callable[[str, str], bool],
                  watchdog=None, governance=None, proactivity=None,
                  assessor=None, max_repairs: int = 1,
-                 confidence_estimator=None):
+                 confidence_estimator=None,
+                 input_event_evidence: Optional[dict] = None,
+                 max_review_failures: int = 3):
         self.store = store
         self.cfg = cfg
         self.executor = executor
@@ -46,6 +49,10 @@ class Engine:
         self.assessor = assessor        # mention 消息的研判层
         self.max_repairs = max_repairs  # deviation 复审环：修复机会次数（0=直接终止）
         self.confidence_estimator = confidence_estimator  # I5：开口确证度的证据源合成
+        # D1b：输入侧开口候选的可注入证据（None → 由输入信号自动构造）
+        self.input_event_evidence = input_event_evidence
+        # D2：连续 watchdog 非 OK 报告上限（对齐 AO autoreview 的 3）
+        self.max_review_failures = max_review_failures
         self.tickets = Tickets(store)
         # 修复计数存 store kv "repairs:{tid}"（唯一事实源，v0.3.1 修复）：
         # 内存 dict 在崩溃恢复后清零 → max_repairs 形同虚设（RED 见 test_v031）
@@ -90,6 +97,9 @@ class Engine:
 
         disposition, assessment = decide(inp, self.cfg, thread_open, self.assessor)
 
+        # D1b：输入侧候选事件（仅 observe 模式；不写回复、不改 disposition）
+        self._maybe_input_candidate(inp, disposition)
+
         if disposition == "follow_up":
             t = self.tickets.get(ot)
             self.tickets.add_input(ot, inp)
@@ -108,6 +118,51 @@ class Engine:
                        {"disposition": disposition, "text": inp.text[:200],
                         "at": time.time()})
         return {"disposition": disposition, "input_id": inp.id}
+
+    def _maybe_input_candidate(self, inp: Input, disposition: str) -> None:
+        """D1b：输入侧 wait/drop 候选事件（observe 模式专属标注旁路）。
+
+        仅对闲聊/被拒输入造低效用候选：accept / follow_up / duplicate 已有
+        任务完成侧的开口事件，避免重复计数（I5 旧测试断言 observe_log 长度为 1）。
+        不写回复、不改 disposition；非 observe 模式零副作用。
+        """
+        pro = self.proactivity
+        if pro is None:
+            return
+        if not getattr(getattr(pro, "cfg", None), "observe", False):
+            return
+        if not (disposition.startswith("rejected") or disposition == "observe"):
+            return
+
+        from .proactivity import CandidateEvent  # 延迟 import，容忍缺模块
+        if self.input_event_evidence is None:
+            markers = getattr(self.cfg, "explicit_markers", ())
+            evidence = {
+                "has_explicit_marker": any(
+                    inp.text.startswith(m) or f" {m}" in inp.text for m in markers),
+                "is_bot": bool(inp.is_bot),
+                "text_len": len(inp.text),
+                "tool_rounds": 0,
+                "repairs": 0,
+            }
+        else:
+            evidence = dict(self.input_event_evidence)
+        utility = float(evidence.pop("utility", 0.01))
+        if self.confidence_estimator is not None:
+            conf = self.confidence_estimator.estimate(evidence)
+        else:
+            conf = 0.95
+        ev = CandidateEvent(event_id=f"input:{inp.id}", utility=utility,
+                            confidence=conf, created_at=time.time())
+        dec = pro.evaluate(ev)
+        if dec.action.startswith("observe_"):
+            # 字段与 on_worker_report 的 observe_log 条目逐字一致；
+            # 输入侧没有 watchdog 结论，记 unassessable。
+            self.observe_log.append({
+                "event_id": ev.event_id, "utility": ev.utility,
+                "confidence": ev.confidence, "created_at": ev.created_at,
+                "p_star": dec.p_star, "u_effective": dec.u_effective,
+                "action": dec.action, "watchdog_verdict": "unassessable"})
 
     def _open_ticket(self, inp: Input, assessment: Optional[Assessment],
                      mandate_rules: Optional[dict] = None) -> str:
@@ -174,6 +229,25 @@ class Engine:
             self.store.put(f"watchdog:{assignment.ticket_id}:{report_payload.get('summary','')[:32]}",
                            {"verdict": verdict_label, "reasons": review.reasons,
                             "at": time.time()})
+            # D2：按票统计连续 watchdog 非 OK 报告；OK 清零，落库可恢复。
+            # 第 max_review_failures+1 次失败直接熔断，不进修复环、不回复。
+            fail_key = f"review_fail:{assignment.ticket_id}"
+            if verdict_label == "ok":
+                self.store.put(fail_key, {"count": 0, "at": time.time()})
+            else:
+                prev = self.store.get(fail_key) or {}
+                streak = int(prev.get("count", 0) or 0) + 1
+                self.store.put(fail_key, {"count": streak, "at": time.time()})
+                if streak > self.max_review_failures:
+                    self._ruling({
+                        "ticket_id": assignment.ticket_id,
+                        "verdict": "DEVIATION",
+                        "reason": "failed_same_sha_retry_limit",
+                        "reasons": list(review.reasons),
+                        "consecutive_failures": streak})
+                    self.tickets.end(assignment.ticket_id)
+                    return {"verdict": verdict_label, "replied": False,
+                            "escalated": True}
             if review.verdict.value == "deviation":
                 # 复审环（I4）：修复次数没用完 → 不终止票，把违规理由
                 # 作为修复指令重投 worker，下一份报告再复核。
@@ -263,7 +337,13 @@ class Engine:
         """worker 要写文件时先问治理。True=放行。
         content_hash 可选：escalate 档消费一次性人工放行（路径+内容哈希绑定）。"""
         if self.governance is None:
-            return True
+            # ADR-0001 fail-closed：治理挂点缺位时默认拒绝，绝不默认放行。
+            # （S3 曾记录此处 return True 的 fail-open 接线，现按规范收口。）
+            self._ruling({"ticket_id": ticket_id, "verdict": "BLOCK",
+                          "reason": "governance_path_block",
+                          "path": path,
+                          "detail": "governance_absent: 治理挂点缺位，fail-closed"})
+            return False
         res = self.governance.check(ticket_id, path, content_hash=content_hash)
         if res.verdict != "ALLOW":
             self._ruling({"ticket_id": ticket_id, "verdict": "BLOCK",

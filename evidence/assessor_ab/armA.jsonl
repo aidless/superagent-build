@@ -1,0 +1,30 @@
+{"task": "evuser:e1", "route": "explicit", "should": true, "disp": "accept", "accepted": true, "ticket": "k1", "verdict": {"verdict": "ok", "replied": true}, "status": "open"}
+{"task": "evuser:e2", "route": "explicit", "should": true, "disp": "accept", "accepted": true, "ticket": "k2", "verdict": {"verdict": "ok", "replied": true}, "status": "open"}
+{"task": "evuser:e3", "route": "explicit", "should": true, "disp": "accept", "accepted": true, "ticket": "k3", "verdict": {"verdict": "ok", "replied": true}, "status": "open"}
+{"task": "evuser:e4", "route": "explicit", "should": true, "disp": "accept", "accepted": true, "ticket": "k4", "verdict": {"verdict": "ok", "replied": true}, "status": "open"}
+{"task": "evuser:e5", "route": "explicit", "should": true, "disp": "accept", "accepted": true, "ticket": "k5", "verdict": {"verdict": "ok", "replied": true}, "status": "open"}
+{"task": "evuser:e6", "route": "explicit", "should": true, "disp": "accept", "accepted": true, "ticket": "k6", "verdict": {"verdict": "ok", "replied": true}, "status": "open"}
+{"task": "evuser:m1", "route": "mention", "should": true, "disp": "accept", "accepted": true, "ticket": "k7", "verdict": {"verdict": "ok", "replied": true}, "status": "open"}
+{"task": "evuser:m2", "route": "mention", "should": true, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:m3", "route": "mention", "should": true, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:m4", "route": "mention", "should": true, "disp": "accept", "accepted": true, "ticket": "k8", "verdict": {"verdict": "ok", "replied": true}, "status": "open"}
+{"task": "evuser:m5", "route": "mention", "should": true, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:m6", "route": "mention", "should": true, "disp": "accept", "accepted": true, "ticket": "k9", "verdict": {"verdict": "ok", "replied": true}, "status": "open"}
+{"task": "evuser:m7", "route": "mention", "should": true, "disp": "accept", "accepted": true, "ticket": "k10", "verdict": {"verdict": "ok", "replied": true}, "status": "open"}
+{"task": "evuser:m8", "route": "mention", "should": true, "disp": "accept", "accepted": true, "ticket": "k11", "verdict": {"verdict": "ok", "replied": true}, "status": "open"}
+{"task": "evuser:m9", "route": "mention", "should": true, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:m10", "route": "mention", "should": true, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:m11", "route": "mention", "should": true, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:m12", "route": "mention", "should": true, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:m13", "route": "mention", "should": true, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:m14", "route": "mention", "should": true, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:m15", "route": "mention", "should": true, "disp": "accept", "accepted": true, "ticket": "k12", "verdict": {"verdict": "ok", "replied": true}, "status": "open"}
+{"task": "evuser:b1", "route": "mention", "should": false, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:b2", "route": "mention", "should": false, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:b3", "route": "mention", "should": false, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:b4", "route": "mention", "should": false, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:b5", "route": "mention", "should": false, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:b6", "route": "mention", "should": false, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:b7", "route": "mention", "should": false, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:b8", "route": "mention", "should": false, "disp": "rejected_eval", "accepted": false}
+{"task": "evuser:b9", "route": "mention", "should": false, "disp": "rejected_eval", "accepted": false}
