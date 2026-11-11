@@ -171,7 +171,7 @@ ground truth 标签的任务集（6 explicit 合规 + 15 mention 合规 + 9 ment
 | Δtokens（dual − single） | +1654 | **−628** |
 | 每对均值 Δtokens | — | **−39.25**（噪声量级） |
 | 同批内逐 seed 符号翻转 | 未测 | **是**（`sign_flips_within_batch=true`） |
-| 配对重采样 95% CI | 未算 | **[−8.3339, −8.3329]，不跨 0** |
+| 配对 bootstrap 95% CI | 未算 | **[−8.3339, −8.3329]，不跨 0** |
 | p*（ΔN·V/ΔT） | 0.0121 元/token | **null**（ΔT<0 侧平衡点不存在） |
 
 结论修正：治理链**不引入可测 token 税**，但同样**不能**宣称"双层省 token"——

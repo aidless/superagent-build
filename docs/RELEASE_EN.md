@@ -43,7 +43,7 @@ The awkward result: **only one of the five headline claims is fully implemented*
 ## Measured, and one result that refutes my own pitch
 
 - **Admission A/B (30 labeled tasks, real gateway)**: with the assessor, precision 1.0 / recall 0.571; without it, precision 1.0 / recall 0.286. Zero decoys admitted, but mention recall is only 40% — the prompt is too conservative. Report: `evidence/assessor_ab/report.json`.
-- **32-run conclusion batch (4 tasks × 4 seeds × 2 arms)**: paired resampling 95% CI = [-8.3339, -8.3329], does not cross zero; `DUAL_WINS` across the whole V grid (0.001→20 per intervention). Looks great — **and it refutes the earlier claim**:
+- **32-run conclusion batch (4 tasks × 4 seeds × 2 arms)**: paired bootstrap 95% CI = [-8.3339, -8.3329], does not cross zero; `DUAL_WINS` across the whole V grid (0.001→20 per intervention). Looks great — **and it refutes the earlier claim**:
   - the 8-run pilot reported ΔT = +1654 tokens ("the dual loop pays a token tax"). The 32-run batch reports ΔT = **-628** — opposite sign;
   - worse, the sign flips **within a single task across seeds** (t-l1: -128 / +287 / -145 / +260). Mean per pair: -39 tokens, i.e. noise;
   - the verdict only holds because it is driven single-handedly by the *assumed* intervention counts (single=2 / dual=1): at V=0.001 the cost delta is -0.0017 CNY.
