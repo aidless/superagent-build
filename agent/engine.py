@@ -47,7 +47,8 @@ class Engine:
         self.max_repairs = max_repairs  # deviation 复审环：修复机会次数（0=直接终止）
         self.confidence_estimator = confidence_estimator  # I5：开口确证度的证据源合成
         self.tickets = Tickets(store)
-        self._repairs: dict[str, int] = {}   # ticket_id -> 已用修复轮数
+        # 修复计数存 store kv "repairs:{tid}"（唯一事实源，v0.3.1 修复）：
+        # 内存 dict 在崩溃恢复后清零 → max_repairs 形同虚设（RED 见 test_v031）
         self.notices: list[dict] = []   # Router 主会话收到的通知（进度地图）
         self.observe_log: list[dict] = []    # I5：observe 判定的标注旁路（原始事件三数）
         self._rulings: list[dict] = []  # 无 governance 时的本地判决留痕
@@ -176,9 +177,12 @@ class Engine:
             if review.verdict.value == "deviation":
                 # 复审环（I4）：修复次数没用完 → 不终止票，把违规理由
                 # 作为修复指令重投 worker，下一份报告再复核。
-                used = self._repairs.get(assignment.ticket_id, 0)
+                # 修复计数以 store kv 为唯一事实源（崩溃恢复后不清零）
+                rec = self.store.get(f"repairs:{assignment.ticket_id}")
+                used = int(rec.get("count", 0)) if rec else 0
                 if used < self.max_repairs:
-                    self._repairs[assignment.ticket_id] = used + 1
+                    self.store.put(f"repairs:{assignment.ticket_id}",
+                                   {"count": used + 1, "at": time.time()})
                     tk = ticket.channels[0][len("thread:"):] if ticket.channels else "inbox"
                     repair = Input(
                         id=f"repair:{assignment.ticket_id}:{used + 1}",

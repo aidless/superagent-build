@@ -6,3 +6,9 @@ dist/
 .governance/
 .pytest_cache/
 demo.db
+service/metrics_*.jsonl
+service/observe_log.jsonl
+service/daily_*.log
+service/tasks_*.json
+service/*.db
+service/__pycache__/

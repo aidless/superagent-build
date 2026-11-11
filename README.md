@@ -3,11 +3,51 @@
 [![PyPI](https://img.shields.io/pypi/v/superagent-build)](https://pypi.org/project/superagent-build/)
 [![Python](https://img.shields.io/pypi/pyversions/superagent-build)](https://pypi.org/project/superagent-build/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![CI](https://github.com/aidless/superagent-build/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-22%20files%20216%20checks%20passed-brightgreen)
+![CI](https://github.com/aidless/superagent-build/actions/workflows/ci.yml/badge.svg) ![Tests](https://img.shields.io/badge/tests-23%20files%20218%20checks%20passed-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-success)
 
+**这是什么**：一个把治理当第一公民的多 agent 内核——每条输入先过两级准入，
+每个写盘先过作用域闸（未授权即 BLOCK，fail-closed），每份报告先过 watchdog
+复核，每次"要不要打扰用户"过开口阈值。全部判决落 append-only 留痕，可审计。
+纯标准库，零依赖。
+
+![fail-closed 全链演示](docs/demo.gif)
+
+<details><summary>上面 GIF 的每一行都从真实引擎事件流重算（点开看证据）</summary>
+
+`docs/demo_events.jsonl` 是这次演示的真实事件（Echo 语义执行器，零网络零模型
+调用，治理/watchdog/复审环/主动层走的都是生产代码路径）。重新生成：
+`python3 service/make_demo_gif.py`。
+
+</details>
+
+## 架构（两 agent 循环 + 四道闸）
+
+```mermaid
+flowchart LR
+    IN[Input] --> GW{"① 准入 gate<br/>bot 门/白名单/显式/follow-up"}
+    GW -- "mention" --> AS{"② 研判 assessor<br/>硬校验三铁律"}
+    GW -- "explicit" --> TK
+    AS -- accept --> TK[Ticket + Mandate]
+    AS -- reject --> REJ[留痕拒绝]
+    TK --> WK[Worker<br/>tool-loop]
+    WK -- "写盘" --> GOV{"③ 治理 pre_write<br/>scope/预算/escalate"}
+    GOV -- BLOCK --> RU[ruling 留痕]
+    GOV -- ALLOW --> WK
+    WK -- 报告 --> WD{"④ Watchdog 复核<br/>规则层 + judge"}
+    WD -- deviation --> REP[修复轮（计数落库）]
+    REP --> WK
+    WD -- ok --> PB{开口阈值 p*}
+    PB -- speak --> OB[outbox → 回复]
+    PB -- wait/drop --> OB2[observe 留痕]
+```
+
+四道闸全部 fail-closed：②缺研判层拒、③未声明 scope 拒（修复计数落库防恢复
+清零）、④复核不过给一轮修复再不过终票、判决 reason 出词表直接 ValueError。
+
 > 定位：把 dsh-superagent-prototype（22k★）宣传了但没做的四件事真的做出来。
-> 证据链：拆解报告见 `../superagent-dig/01-prototype-dissection.md`（文章卖点兑现度表）。
+> 证据链：拆解报告见 [aidless/superagent-dig](https://github.com/aidless/superagent-dig)
+> `01-prototype-dissection.md`（文章卖点兑现度表）。
 
 ## 与原型的差异（本项目核心增量）
 
@@ -21,22 +61,10 @@
 抄原型的（已验证扎实）：两级准入、先存后做 outbox 三角、纯幂等 receipt、follow-up 语义、
 bot 门、"Router 少说话"。
 
-## 架构
-
-```
-Input → intake（幂等 receipt）
-  → admission 两级：规则 gate（bot 门/白名单/显式指令/follow-up）
-                    → 研判层（mention 时，硬校验：恰好一条规则+证据+防幻觉规则名）
-  → accept → Decision → Ticket（订阅线程）→ Assignment → worker 会话
-  → worker report → Watchdog 复核（规则层 → judge）→ 治理判决 → 回复出站（outbox 三角）
-写前：pre_write → governance.check（未声明 scope 即 BLOCK，落 ruling）
-开口：任务完成等事件 → proactivity.evaluate → speak/wait/drop（observe 模式只记录）
-```
-
 ## 运行自检（RED→GREEN 纪律：先注入违规证明会红，再验证放行）
 
 ```bash
-python3 -m pytest tests/ -q             # 86 passed：i1_i4/i2/i3/i5/i6/integration + j1/j2/j3/j4 + k3 + 老套件
+python3 -m pytest tests/ -q             # 101 passed：i1_i4/i2/i3/i5/i6/integration + j1/j2/j3/j4 + k3 + v03_upgrades + v031_repairs_persist + 老套件
 python3 tests/test_store.py            # 老套件为自检脚本，逐个跑，末行 FAILURES: none 即过
 python3 tests/test_admission_outbox.py # 持久层：先存后做/幂等/退避/崩溃恢复
 python3 tests/test_e2e_m0.py           # 端到端：建票→派工→报告→回复→恢复
@@ -44,6 +72,25 @@ python3 tests/test_governance.py       # 写作用域治理（M1）
 python3 tests/test_watchdog.py         # 跑偏检测（M2）
 python3 tests/test_proactivity.py      # 开口阈值（M3）
 ```
+
+## Assessor A/B eval (30 tasks, real gateway)
+
+ground truth 标签的任务集（6 explicit 合规 + 15 mention 合规 + 9 mention 诱饵），
+两臂对照：A=LLMAssessor（deepseek-v4.1-flash 研判），B=assessor=None（fail-closed）。
+
+| 指标 | A 臂（assessor） | B 臂（fail-closed） |
+|---|---|---|
+| admission precision | 1.0 | 1.0 |
+| recall（合规任务收下率） | **0.571** | 0.286 |
+| mention 路由召回 | **6/15** | **0/15** |
+| 诱饵误收（危害面） | **0** | 0 |
+| worker 调用 / tokens | 25 / 9295 | 12 / 4495 |
+
+结论：**研判层在 mention 路由上把召回从 0 提到 40%，诱饵误收为 0**——
+它买到的是"fail-closed 基线永远接不了的非显式任务"，且没引入新的危害面。
+诚实口径：assessor 自身的 ~24 次调用未入 worker 台账（已知计量缺口，其成本
+未计入上表）；mention 召回 40% 说明研判 prompt 仍偏保守，有上调空间。
+产物：`results/eval/assessor_ab/report.json`（report/armA/armB/metrics 全落盘）。
 
 ## 里程碑状态
 
@@ -78,7 +125,8 @@ python3 tests/test_proactivity.py      # 开口阈值（M3）
 - [x] K1 真实臂 sweep：sweep_bridge.py 加 run_real_sweep——single 臂（裸 worker 无治理）vs
       dual 臂（Engine 全链）真跑 Magpie 网关（deepseek-v4.1-flash），2任务×2seeds×2臂=8 runs
       真实 usage；delta_tokens=1654 vs 介入节省 4 次 → p*=0.0121 元/token、verdict=DUAL_WINS
-      （results/real/sweep_curve.json，诚实口径：介入价值 V=5.0 为假设参数）
+      （results/real/sweep_curve.json，诚实口径：介入价值 V=5.0 为假设参数；
+      **8 runs 是探路 batch，结论级 32-run sweep 待跑，DUAL_WINS 暂作方向性证据**）
 - [x] K2 真标注数据：12 真任务（合规/挑逗/闲聊）独立线程真跑，observe 攒 12 事件 →
       close_loop 真校准 applied_params=(0.5,0.2,0.05)（precision 1.0 n_speak=3 trusted）；
       诚实发现：confidence 同质化（单一证据源+watchdog 全 ok → 12 事件同置信度），
@@ -97,6 +145,10 @@ python3 tests/test_proactivity.py      # 开口阈值（M3）
       ④ APx 式信用门——speak_bad>0 的批次官方校准 INELIGIBLE（只给诊断值）；
       ⑤ reason 词表——engine.REASONS 七种判决原因统一，词表外直接 ValueError；
       ⑥ symlink 加固——O_NOFOLLOW 打开 + governance normpath 拦 lexical 穿越。
+- [x] v0.3.1 修复：复审环修复计数落库（engine.py _repairs 内存 dict → store kv
+      "repairs:{tid}" 唯一事实源）——崩溃恢复后 max_repairs 不再形同虚设
+      （test_v031_repairs_persist，RED：恢复后第二份 deviation 必走 repair-limit）；
+      service/eval_assessor_ab.py 研判层 30 任务 A/B 对照（见上表）
 - [x] 服役批（service/run_service.py）：真网关真杂活 3 任务（CHANGELOG 维护/
       越界挑逗/运行日志）全链跑通——worker 经治理路径真写盘、越界请求自主拒绝、
       T2 报告诚实标注"已提交、结果未确认"与盘上事实吻合；

@@ -16,3 +16,5 @@
    （TOCTOU 收口内核层），governance._matches 先 normpath 拦 lexical 穿越。
 
 测试：99 pytest passed + 9 脚本套件全绿。
+
+## 2025-06-11

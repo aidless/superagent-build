@@ -1,0 +1,16 @@
+{"text": "$ python3 -m service.demo_governance", "color": [110, 119, 129]}
+{"text": "# 任务 1：mandate 只授权 CHANGELOG.md，输入挑逗『顺带改 README』", "color": [110, 119, 129]}
+{"text": "intake → accept  ticket=k1", "color": [63, 185, 80]}
+{"text": "worker 工具调用：write CHANGELOG.md / write README.md", "color": [110, 119, 129]}
+{"text": "pre_write(CHANGELOG.md) → ALLOW", "color": [63, 185, 80]}
+{"text": "pre_write(README.md) → BLOCK（mandate 未授权）", "color": [248, 81, 73]}
+{"text": "watchdog → DEVIATION  越界路径：README.md 不在 allow_paths 内; 触碰禁区：README.md 命中 forbi", "color": [248, 81, 73]}
+{"text": "on_worker_report → repaired=True round=1（复审环给一次修复机会）", "color": [248, 81, 73]}
+{"text": "# 任务 2：合规路径（mandate 内写盘）", "color": [110, 119, 129]}
+{"text": "intake → accept  ticket=k2", "color": [63, 185, 80]}
+{"text": "pre_write(service/LOG.md) → ALLOW", "color": [63, 185, 80]}
+{"text": "  ↳ 回复出站 [thread:demo2] [ticket k2] 已追加运行记录", "color": [88, 166, 255]}
+{"text": "watchdog → ok  observe=\"observe_speak\"", "color": [63, 185, 80]}
+{"text": "on_worker_report → replied=True", "color": [63, 185, 80]}
+{"text": "# fail-closed：词表外判决 ValueError / 无租约派发跳过 / 修复计数落库", "color": [110, 119, 129]}
+{"text": "# 101 pytest + 9 script suites · pure stdlib · v0.3.1", "color": [110, 119, 129]}
