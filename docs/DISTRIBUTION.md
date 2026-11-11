@@ -272,13 +272,21 @@ README 第 58 行写着 `For adding AI agents'-related SDKs, frameworks and tool
 | Reddit 发 r/LocalLLaMA 或 r/AI_Agents | Reddit 账号，账号年龄与 karma 满足版规 | Lead | 英文稿在第三节，未发布 |
 | Hacker News 发 Show HN | HN 账号，标题需以 Show HN 开头，新账号有频率限制 | Lead | 英文稿在第三节，未发布 |
 | X 发三条短帖串 | X 账号，可发 thread | Lead | 稿子在第四节，未发布 |
-| 给 awesome-ai-agents 开 PR | GitHub 账号，对目标仓库有 fork 与开 PR 权限 | Lead | 草案在第五节，未开 PR |
-| 上传 PyPI v0.3.2 | PyPI 账号与 API token，或 trusted publisher 配置，本地 twine | Lead | 未上传，线上仍是 0.3.1 |
-| 建 GitHub Release v0.3.2 | 仓库写权限 token，或网页登录 | Lead | 未创建，已有 v0.2.0 与 v0.3.0 |
-| 改 `pyproject.toml` 的 version | 仓库写权限 | Lead | 未改，仍是 0.3.1，本轮不允许动 |
+| 给 awesome-ai-agents 开 PR | GitHub 账号，对目标仓库有 fork 与开 PR 权限 | Lead | **已开**：https://github.com/e2b-dev/awesome-ai-agents/pull/1971（state=open，head `aidless:add-superagent-build`） |
+| 上传 PyPI v0.3.2 | PyPI 账号与 API token，或 trusted publisher 配置，本地 twine | Lead | **已上传并验号**：latest=0.3.2，releases `0.1.0 / 0.3.1 / 0.3.2` |
+| 建 GitHub Release v0.3.2 | 仓库写权限 token，或网页登录 | Lead | **已建**：https://github.com/aidless/superagent-build/releases/tag/v0.3.2 （tag v0.3.2 已推） |
+| 改 `pyproject.toml` 的 version | 仓库写权限 | Lead | **已改**：`version = "0.3.2"`（commit f3b9618） |
 | 归档上游拆解核对表 | 无需额外凭据 | 已在本仓完成 | issue #1 已存在，state 为 open |
 | Release v0.2.0 与 v0.3.0 | 无需额外凭据 | 已在本仓完成 | 两个 tag 都在 |
 | 两仓互链 | 无需额外凭据 | 已在本仓完成 | 本仓 README 两处链到 superagent-dig，对方 README 三处回链 |
 | 治理契约、ADR、三份文档 | 无需额外凭据 | 已在本仓完成 | `docs/spec`、`docs/adr`、本文件 |
+
+## 七、执行回执（v0.3.2 发版会话）
+
+- PyPI 0.3.2、tag v0.3.2、GitHub Release v0.3.2、pyproject 版本号：均已落地并线上验号。
+- awesome-list PR #1971 已开（字母序插位实测通过，PR body 带可复算数字与诚实局限）。
+- 知乎 / 掘金 / Reddit / HN / X 五个渠道：稿子已就绪，**尚未投放**——这些渠道各自的账号与发帖权限不在本工作区凭据内，由操作者本人按第一节到第四节的稿子手动发布。
+- 发版后 CI 首次失败（tests/test_p1a_calibration_apply.py 读未入库的 results/real/d4_calibration/calibration.json）；修复方式是把该报告收进 evidence bundle（10 份副本）并让测试读入库副本，修复 commit 7e02e63 后 CI success。
+- 本回执只记录已执行动作；未投放的渠道保持「未发布」状态，不写成已发布。
 
 发帖前请再确认两件事。一是 PyPI 上 v0.3.2 是否已经可见，没上传就把稿子里的版本号与 PyPI 链接改成当前可用的版本，否则读者点进去会看到旧快照。二是 awesome-list 的条目顺序，维护者合并前很可能按自己的字母序重排，这不是问题，但 PR body 里要说明插入位置。

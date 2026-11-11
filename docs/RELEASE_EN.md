@@ -5,7 +5,7 @@
 > 2. Four gates for agents: from source dissection to a pip-installable v0.3.2
 > 3. The cost argument for multi-agent was wrong in my own benchmark
 
-Version note before the article. This is the v0.3.2 release, code at main HEAD. The v0.3.2 upload to PyPI is done by the maintainer in this same batch; the published snapshot right now is 0.3.1. Every number below comes from artifacts on disk in this repo, and the reproduction commands are at the end.
+Version note before the article. This is the v0.3.2 release, code at main HEAD. v0.3.2 is live on PyPI (latest=0.3.2); the git tag and GitHub Release landed in the same batch. Every number below comes from artifacts on disk in this repo, and the reproduction commands are at the end.
 
 ---
 
