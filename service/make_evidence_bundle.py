@@ -28,6 +28,7 @@ SOURCES = [
     ("results/eval/assessor_ab/armA.jsonl", "assessor_ab/armA.jsonl"),
     ("results/eval/assessor_ab/armB.jsonl", "assessor_ab/armB.jsonl"),
     ("results/real/k2_calibration.json", "calibration/k2_calibration.json"),
+    ("results/real/d4_calibration/calibration.json", "calibration/d4_calibration.json"),
     ("service/observe_log.jsonl", "calibration/service_observe.jsonl"),
     ("docs/demo_events.jsonl", "demo/events.jsonl"),
 ]

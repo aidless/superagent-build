@@ -11,6 +11,7 @@ RED 项（before）：
 """
 import json
 import os
+import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -96,7 +97,8 @@ def test_close_loop_without_apply_keeps_cfg(tmp_path):
 
 def test_load_calibrated_cfg_reads_real_report():
     from agent.calibration_loop import load_calibrated_cfg
-    path = "results/real/d4_calibration/calibration.json"
+    # 真实落盘报告的入库副本（evidence bundle 由 make_evidence_bundle.py 生成并 sha256 验真）
+    path = os.path.join("evidence", "calibration", "d4_calibration.json")
     report = json.load(open(path, encoding="utf-8"))
     cfg = load_calibrated_cfg(report)
     # 逐字复算：落盘 applied_params 的三个参数必须进 cfg，且解除 observe

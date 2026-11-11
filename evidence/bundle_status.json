@@ -7,9 +7,10 @@
     "assessor_ab/armA.jsonl",
     "assessor_ab/armB.jsonl",
     "calibration/k2_calibration.json",
+    "calibration/d4_calibration.json",
     "calibration/service_observe.jsonl",
     "demo/events.jsonl"
   ],
   "skipped_missing": [],
-  "manifest_sha256": "9edf04cf8782f7af5ec36c288edf5874fd69a20907cd1ed34523a11958a72ad8"
+  "manifest_sha256": "35cb97f073023c08a335b57255a68f0bdcb7038a9610df04e1b25afd7e4d0cd7"
 }
