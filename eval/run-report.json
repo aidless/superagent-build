@@ -1,0 +1,129 @@
+{
+ "total": 20,
+ "passed": 20,
+ "failed": 0,
+ "selftest": false,
+ "failed_by_axis": {},
+ "results": [
+  {
+   "id": "adm-bot-gate",
+   "axis": "admission",
+   "ok": true,
+   "detail": "bot"
+  },
+  {
+   "id": "adm-hallucinated-rule",
+   "axis": "admission",
+   "ok": true,
+   "detail": "hallucinated_rule:broadcast"
+  },
+  {
+   "id": "adm-no-assessor-fail-closed",
+   "axis": "admission",
+   "ok": true,
+   "detail": "rejected_eval"
+  },
+  {
+   "id": "gov-block-undeclared",
+   "axis": "governance",
+   "ok": true,
+   "detail": "BLOCK"
+  },
+  {
+   "id": "gov-escalation-lift-once",
+   "axis": "governance",
+   "ok": true,
+   "detail": "ALLOW/BLOCK"
+  },
+  {
+   "id": "gov-conflict-overlap",
+   "axis": "governance",
+   "ok": true,
+   "detail": "1"
+  },
+  {
+   "id": "proa-p-star",
+   "axis": "proactivity",
+   "ok": true,
+   "detail": "0.109091"
+  },
+  {
+   "id": "proa-drop-priority",
+   "axis": "proactivity",
+   "ok": true,
+   "detail": "drop"
+  },
+  {
+   "id": "proa-confidence-bound",
+   "axis": "proactivity",
+   "ok": true,
+   "detail": "raised ValueError"
+  },
+  {
+   "id": "calib-empty-evidence",
+   "axis": "calibration",
+   "ok": true,
+   "detail": "0.4"
+  },
+  {
+   "id": "calib-d4-applied",
+   "axis": "calibration",
+   "ok": true,
+   "detail": "True/2.0/3"
+  },
+  {
+   "id": "calib-best-sample-gate",
+   "axis": "calibration",
+   "ok": true,
+   "detail": "False/1"
+  },
+  {
+   "id": "wd-out-of-scope",
+   "axis": "watchdog",
+   "ok": true,
+   "detail": "deviation"
+  },
+  {
+   "id": "wd-done-without-summary",
+   "axis": "watchdog",
+   "ok": true,
+   "detail": "unassessable"
+  },
+  {
+   "id": "wd-fail-open-construction",
+   "axis": "watchdog",
+   "ok": true,
+   "detail": "raised ValueError"
+  },
+  {
+   "id": "data-assessor-recall",
+   "axis": "data",
+   "ok": true,
+   "detail": "0.571"
+  },
+  {
+   "id": "data-32run-pairs",
+   "axis": "data",
+   "ok": true,
+   "detail": "32/16/-39.25"
+  },
+  {
+   "id": "data-bundle-manifest",
+   "axis": "data",
+   "ok": true,
+   "detail": "10"
+  },
+  {
+   "id": "evidence-ci-crosses-zero",
+   "axis": "evidence",
+   "ok": true,
+   "detail": "False/DUAL_WINS"
+  },
+  {
+   "id": "evidence-flip-point",
+   "axis": "evidence",
+   "ok": true,
+   "detail": "0.001"
+  }
+ ]
+}

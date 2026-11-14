@@ -305,3 +305,44 @@ v0.3.2 之前 `close_loop()` 只输出 `applied_params`，参数从不回写到�
 - `scheduler.py` 的 `Scheduler.tick`：外部主循环每轮调一次即可驱动全系统（无 sleep 无线程）；
 - `metrics.py` 的 `MetricsLedger`：逐调用成本记账（tokens/延迟/成功率，JSONL 落盘），
   与 `../superagent-dig/02-cost-experiment/framework.py` 的 CallRecord 同构对接。
+
+## 验收标准与复算
+
+本仓判为合格的条件是 `python3 eval/run_cases.py` 通过率必须为 100%（20/20），且
+`make eval` 退出码必须为 0；任何一条失败即判为不合格。
+
+题库 `eval/cases.jsonl` 共 20 条，七键 `id/axis/question/expected/mode/verify/source`；
+18 条 `expr` + 2 条 `raises` 全部**真调本仓 API 或真解析本仓证据文件**，期望值现算
+（不抄文档、不抄本 README），改一行实现就会变红。
+
+| axis | 条数 | 判什么 | 代表 case |
+|---|---|---|---|
+| admission | 3 | 两级准入：bot 门 / 幻觉规则名 / 研判层缺位 fail-closed | `adm-hallucinated-rule` |
+| governance | 3 | 写作用域 BLOCK、escalate 一次性放行、冲突检测 | `gov-escalation-lift-once` |
+| proactivity | 3 | p* 公式、drop 优先级、confidence 越界 | `proa-p-star` |
+| calibration | 3 | 空证据保守值、d4 真校准结果、K3 样本量门 | `calib-best-sample-gate` |
+| watchdog | 3 | 越界/无 summary 判决、构造级 fail-open | `wd-done-without-summary` |
+| data | 3 | `evidence/` 里 A/B 报告、32-run 记录、证据包清单 | `data-32run-pairs` |
+| evidence | 2 | CI 是否跨 0、V 敏感性翻面点 | `evidence-flip-point` |
+
+```bash
+python3 eval/run_cases.py            # 20/20 cases passed
+python3 eval/run_cases.py --selftest # 19/20（篡改第一条期望值必须变红），exit 0
+make eval                            # run_cases + pytest，退出码 0
+```
+
+复算说明：`python3 eval/run_cases.py --save` 把逐条结果与按 axis 的失败归因写入
+`eval/run-report.json`（含 total/passed/failed/failed_by_axis/results），可逐条对表；
+`--selftest` 是这套题自己的非空性反证——期望值改坏必须变红，否则题库无效。
+数据类 case 直接读 `evidence/` 下的只读副本（`MANIFEST.sha256` 验真），不依赖网络与真网关。
+
+失败归因：`run_cases.py` 不报单一 pass_rate，失败按 axis 汇总，例如：
+
+```
+19/20 cases passed
+失败归因（按 axis）：
+  admission: 1 条 —— adm-bot-gate
+```
+
+看到某一 axis 成片变红即为该模块的回归（例如 `proactivity` 全红 = p*/判定序被改），
+而不是笼统的"通过率下降"。
